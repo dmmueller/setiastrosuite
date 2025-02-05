@@ -5,7 +5,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('.venv/lib/python3.12/site-packages/astroquery/CITATION', 'astroquery'),
+        ('.venv/lib/python3.*/site-packages/astroquery/CITATION', 'astroquery'),
         ('celestial_catalog.csv', '.'), 
         ('astrosuite.png', '.'), 
         ('wimilogo.png', '.'), 
@@ -54,8 +54,8 @@ a = Analysis(
         ('font.png', '.'), 
         ('spinner.gif', '.'), 
         ('cvs.png', '.'), 
-        ('.venv/lib/python3.12/site-packages/astroquery/simbad/data', 'astroquery/simbad/data'), 
-        ('.venv/lib/python3.12/site-packages/astropy/CITATION', 'astropy')
+        ('.venv/lib/python3.*/site-packages/astroquery/simbad/data', 'astroquery/simbad/data'), 
+        ('.venv/lib/python3.*/site-packages/astropy/CITATION', 'astropy')
     ],
     hiddenimports=[],
     hookspath=[],
