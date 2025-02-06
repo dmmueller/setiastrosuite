@@ -1,11 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+site_packages = '.venv/lib/python3.*/site-packages'
+
 a = Analysis(
     ['setiastrosuitemacQT6.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('.venv/lib/python3.*/site-packages/astroquery/CITATION', 'astroquery'),
+        (site_packages + '/astroquery/CITATION', 'astroquery'),
         ('celestial_catalog.csv', '.'), 
         ('astrosuite.png', '.'), 
         ('wimilogo.png', '.'), 
@@ -54,8 +56,8 @@ a = Analysis(
         ('font.png', '.'), 
         ('spinner.gif', '.'), 
         ('cvs.png', '.'), 
-        ('.venv/lib/python3.*/site-packages/astroquery/simbad/data', 'astroquery/simbad/data'), 
-        ('.venv/lib/python3.*/site-packages/astropy/CITATION', 'astropy')
+        (site_packages + '/astroquery/simbad/data', 'astroquery/simbad/data'), 
+        (site_packages + '/astropy/CITATION', 'astropy')
     ],
     hiddenimports=[],
     hookspath=[],
