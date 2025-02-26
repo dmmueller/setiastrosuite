@@ -209,7 +209,7 @@ import math
 from copy import deepcopy
 
 
-VERSION = "2.11.1"
+VERSION = "2.11.3"
 
 
 if hasattr(sys, '_MEIPASS'):
@@ -263,6 +263,7 @@ if hasattr(sys, '_MEIPASS'):
     platesolve_path = os.path.join(sys._MEIPASS, 'platesolve.png')
     psf_path = os.path.join(sys._MEIPASS, 'psf.png')
     supernova_path = os.path.join(sys._MEIPASS, 'supernova.png')
+    starregistration_path = os.path.join(sys._MEIPASS, 'starregistration.png')
 else:
     # Development path
     icon_path = 'astrosuite.png'
@@ -314,6 +315,7 @@ else:
     platesolve_path = 'platesolve.png'
     psf_path = 'psf.png'
     supernova_path = 'supernova.png'
+    starregistration_path = 'starregistration.png'
 
 
 class AstroEditingSuite(QMainWindow):
@@ -755,6 +757,11 @@ class AstroEditingSuite(QMainWindow):
         stellar_align_action.triggered.connect(self.stellar_alignment)
         mosaic_menu.addAction(stellar_align_action)
 
+        star_registration_action = QAction(QIcon(starregistration_path), "Star Registration", self)
+        star_registration_action.setStatusTip("Register multiple images based on star alignment")
+        star_registration_action.triggered.connect(self.star_registration)
+        mosaic_menu.addAction(star_registration_action)        
+
         plate_solver_action = QAction(QIcon(platesolve_path), "Plate Solver", self)
         plate_solver_action.setStatusTip("Perform plate solving on an image")
         plate_solver_action.triggered.connect(self.launch_plate_solver)
@@ -915,6 +922,7 @@ class AstroEditingSuite(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, mosaictoolbar)        
         mosaictoolbar.addAction(mosaic_master_action)    
         mosaictoolbar.addAction(stellar_align_action)
+        mosaictoolbar.addAction(star_registration_action)
         mosaictoolbar.addAction(plate_solver_action)
         mosaictoolbar.addAction(psf_viewer_action)     
         mosaictoolbar.addAction(supernova_action)   
@@ -1031,14 +1039,14 @@ class AstroEditingSuite(QMainWindow):
         # --------------------
         self.tabs = QTabWidget()
         # Add individual tabs for each tool
-        self.tabs.addTab(XISFViewer(image_manager=self.image_manager), "XISF Liberator")
+        self.tabs.addTab(XISFViewer(image_manager=self.image_manager), "Image Viewer")
         self.tabs.addTab(BlinkTab(image_manager=self.image_manager), "Blink Comparator")
         self.tabs.addTab(CosmicClarityTab(image_manager=self.image_manager), "Cosmic Clarity Sharpen/Denoise")
         self.tabs.addTab(CosmicClaritySatelliteTab(), "Cosmic Clarity Satellite")
         self.tabs.addTab(StatisticalStretchTab(image_manager=self.image_manager), "Statistical Stretch")
         self.tabs.addTab(FullCurvesTab(image_manager=self.image_manager), "Curves Utility")
         self.tabs.addTab(PerfectPalettePickerTab(image_manager=self.image_manager, parent=self), "Perfect Palette Picker")
-        self.tabs.addTab(NBtoRGBstarsTab(image_manager=self.image_manager), "NB to RGB Stars")
+        self.tabs.addTab(NBtoRGBstarsTab(image_manager=self.image_manager, parent=self), "NB to RGB Stars")
         self.tabs.addTab(StarStretchTab(image_manager=self.image_manager), "Star Stretch")
         self.tabs.addTab(FrequencySeperationTab(image_manager=self.image_manager), "Frequency Separation")
         self.tabs.addTab(HaloBGonTab(image_manager=self.image_manager), "Halo-B-Gon")
@@ -1102,6 +1110,11 @@ class AstroEditingSuite(QMainWindow):
 
         self.check_for_updatesstartup()  # Call this in your app's init
         self.update_slot_toolbar_highlight()
+
+
+    def star_registration(self):
+        self.star_registration_window = StarRegistrationWindow(self.image_manager)
+        self.star_registration_window.show()
 
     def show_about_dialog(self):
         dialog = AboutDialog(self)
@@ -1477,7 +1490,7 @@ class AstroEditingSuite(QMainWindow):
         Clears all current project data (images, masks, undo/redo stacks, etc.)
         after warning the user that this operation is destructive.
         """
-        from PyQt6.QtWidgets import QMessageBox
+        
 
         reply = QMessageBox.question(
             self,
@@ -1950,12 +1963,7 @@ class AstroEditingSuite(QMainWindow):
             new_height = int(height * factor)
 
             # Import cv2 and use cv2.resize with the LANCZOS4 interpolation method.
-            import cv2
-            resized_image = cv2.resize(
-                current_image,
-                (new_width, new_height),
-                interpolation=cv2.INTER_LANCZOS4
-            )
+            resized_image = rescale_image_numba(current_image, factor)
 
             # Prepare metadata (append a description note about rescaling).
             metadata = self.image_manager._metadata.get(self.image_manager.current_slot, {}).copy()
@@ -2001,7 +2009,7 @@ class AstroEditingSuite(QMainWindow):
             current_image = self.image_manager.image.copy()
 
             # Perform the horizontal flip using numpy
-            flipped_image = np.fliplr(current_image)
+            flipped_image = flip_horizontal_numba(current_image)  # Flip horizontally
 
             # Prepare metadata
             metadata = self.image_manager._metadata.get(self.image_manager.current_slot, {}).copy()
@@ -2046,7 +2054,7 @@ class AstroEditingSuite(QMainWindow):
             current_image = self.image_manager.image.copy()
 
             # Perform the vertical flip using numpy
-            flipped_image = np.flipud(current_image)
+            flipped_image = flip_vertical_numba(current_image)  # Flip vertically
 
             # Prepare metadata
             metadata = self.image_manager._metadata.get(self.image_manager.current_slot, {}).copy()
@@ -2091,7 +2099,7 @@ class AstroEditingSuite(QMainWindow):
             current_image = self.image_manager.image.copy()
 
             # Perform the rotation using numpy
-            rotated_image = np.rot90(current_image, k=3)  # Rotate 270 degrees to achieve 90 degrees clockwise
+            rotated_image = rotate_90_clockwise_numba(current_image)  # Rotate clockwise
 
             # Prepare metadata
             metadata = self.image_manager._metadata.get(self.image_manager.current_slot, {}).copy()
@@ -2136,7 +2144,7 @@ class AstroEditingSuite(QMainWindow):
             current_image = self.image_manager.image.copy()
 
             # Perform the rotation using numpy
-            rotated_image = np.rot90(current_image, k=1)  # Rotate 90 degrees counterclockwise
+            rotated_image = rotate_90_counterclockwise_numba(current_image)  # Rotate counterclockwise
 
             # Prepare metadata
             metadata = self.image_manager._metadata.get(self.image_manager.current_slot, {}).copy()
@@ -2186,7 +2194,7 @@ class AstroEditingSuite(QMainWindow):
                 return
 
             # Perform the inversion
-            inverted_image = 1.0 - current_image
+            inverted_image = invert_image_numba(current_image)
 
             # Prepare metadata
             metadata = self.image_manager._metadata.get(self.image_manager.current_slot, {}).copy()
@@ -4232,6 +4240,96 @@ class AstroEditingSuite(QMainWindow):
             print("Redo performed.")
         else:
             QMessageBox.information(self, "Redo", "No actions to redo.")            
+
+@njit(parallel=True, fastmath=True)
+def rescale_image_numba(image, factor):
+    """
+    Custom rescale function using bilinear interpolation optimized with numba.
+    """
+    height, width = image.shape[:2]
+    new_width = int(width * factor)
+    new_height = int(height * factor)
+
+    # Create an empty output array
+    output = np.zeros((new_height, new_width, image.shape[2]), dtype=np.float32)
+
+    for y in prange(new_height):
+        for x in prange(new_width):
+            src_x = x / factor
+            src_y = y / factor
+            x0, y0 = int(src_x), int(src_y)
+            x1, y1 = min(x0 + 1, width - 1), min(y0 + 1, height - 1)
+
+            # Bilinear interpolation
+            dx, dy = src_x - x0, src_y - y0
+            for c in range(image.shape[2]):  # Loop over channels
+                output[y, x, c] = (
+                    image[y0, x0, c] * (1 - dx) * (1 - dy)
+                    + image[y0, x1, c] * dx * (1 - dy)
+                    + image[y1, x0, c] * (1 - dx) * dy
+                    + image[y1, x1, c] * dx * dy
+                )
+
+    return output
+
+@njit(parallel=True, fastmath=True)
+def flip_horizontal_numba(image):
+    """
+    Flips an image horizontally using Numba JIT.
+    """
+    height, width, channels = image.shape
+    output = np.empty_like(image)
+    for y in prange(height):
+        for x in prange(width):
+            output[y, x] = image[y, width - x - 1]
+    return output
+
+@njit(parallel=True, fastmath=True)
+def flip_vertical_numba(image):
+    """
+    Flips an image vertically using Numba JIT.
+    """
+    height, width, channels = image.shape
+    output = np.empty_like(image)
+    for y in prange(height):
+        output[y] = image[height - y - 1]
+    return output
+
+@njit(parallel=True, fastmath=True)
+def rotate_90_clockwise_numba(image):
+    """
+    Rotates the image 90 degrees clockwise.
+    """
+    height, width, channels = image.shape
+    output = np.empty((width, height, channels), dtype=image.dtype)
+    for y in prange(height):
+        for x in prange(width):
+            output[x, height - 1 - y] = image[y, x]
+    return output
+
+@njit(parallel=True, fastmath=True)
+def rotate_90_counterclockwise_numba(image):
+    """
+    Rotates the image 90 degrees counterclockwise.
+    """
+    height, width, channels = image.shape
+    output = np.empty((width, height, channels), dtype=image.dtype)
+    for y in prange(height):
+        for x in prange(width):
+            output[width - 1 - x, y] = image[y, x]
+    return output
+
+@njit(parallel=True, fastmath=True)
+def invert_image_numba(image):
+    """
+    Inverts an image (1 - pixel value).
+    """
+    output = np.empty_like(image)
+    for y in prange(image.shape[0]):
+        for x in prange(image.shape[1]):
+            for c in prange(image.shape[2]):
+                output[y, x, c] = 1.0 - image[y, x, c]
+    return output
 
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
@@ -9215,6 +9313,464 @@ class StellarAlignmentDialog(QDialog):
         QMessageBox.information(self, "Pushed", "Aligned image pushed to the active slot.")
         self.accept()
 
+class StarRegistrationThread(QThread):
+    progress_update = pyqtSignal(str)
+    registration_complete = pyqtSignal(bool, str)
+
+    def __init__(self, reference_image_path, files_to_align, output_directory):
+        super().__init__()
+        self.reference_image_path = reference_image_path
+        self.files_to_align = files_to_align
+        self.output_directory = output_directory
+        self.failed_files = []  # Track failed images
+
+    def run(self):
+        try:
+            self.progress_update.emit("Loading reference image...")
+            print("DEBUG: Loading reference image...")
+
+            ref_image, ref_header, ref_bit_depth, ref_is_mono = load_image(self.reference_image_path)
+            print(f"DEBUG: Reference image shape={ref_image.shape}, bit depth={ref_bit_depth}, mono={ref_is_mono}")
+
+            ref_stars = self.detect_stars(ref_image)
+            print(f"DEBUG: Detected {len(ref_stars)} stars in reference image")
+
+            if len(ref_stars) < 10:
+                self.registration_complete.emit(False, "Insufficient stars in reference image!")
+                return
+
+            ref_triangles = self.build_triangle_dict(ref_stars)
+            print(f"DEBUG: Built {len(ref_triangles)} triangle entries from reference image")
+
+            success_count = 0
+
+            for i, file_path in enumerate(self.files_to_align):
+                self.progress_update.emit(f"Processing {os.path.basename(file_path)} ({i+1}/{len(self.files_to_align)})...")
+                print(f"DEBUG: Processing {file_path}")
+
+                # Load image
+                img, img_header, img_bit_depth, img_is_mono = load_image(file_path)
+                if img is None:
+                    self.progress_update.emit(f"Skipping {file_path} (could not load).")
+                    self.failed_files.append(file_path)
+                    continue
+
+                print(f"DEBUG: Loaded image shape={img.shape}, bit depth={img_bit_depth}, mono={img_is_mono}")
+
+                # Detect stars using 3x3 grid strategy
+                img_stars = self.detect_grid_stars(img)
+                print(f"DEBUG: Detected {len(img_stars)} stars in image")
+
+                if len(img_stars) < 9:
+                    self.progress_update.emit(f"Skipping {file_path} (not enough stars found).")
+                    self.failed_files.append(file_path)
+                    continue
+
+                # Compute affine transformation with RANSAC
+                transform_matrix = self.compute_affine_transform_with_ransac(img_stars, ref_stars, ref_triangles)
+                print(f"DEBUG: Transformation matrix: {transform_matrix}")
+
+                if transform_matrix is None:
+                    self.progress_update.emit(f"Skipping {file_path} (alignment failed).")
+                    self.failed_files.append(file_path)
+                    continue
+
+                # Apply transformation
+                aligned_image = self.apply_affine_transform(img, transform_matrix)
+
+                if aligned_image is None:
+                    self.progress_update.emit(f"Skipping {file_path} (could not apply transformation).")
+                    self.failed_files.append(file_path)
+                    continue
+
+                # Generate output filename
+                output_filename = os.path.join(self.output_directory, os.path.splitext(os.path.basename(file_path))[0] + "_r.fits")
+
+                # Save the aligned image
+                save_image(
+                    img_array=aligned_image,
+                    filename=output_filename,
+                    original_format="fits",
+                    bit_depth=img_bit_depth,
+                    original_header=img_header if img_header else None,
+                    is_mono=img_is_mono
+                )
+
+                print(f"DEBUG: Saved aligned image to {output_filename}")
+                success_count += 1
+
+            self.show_summary(success_count)
+
+        except Exception as e:
+            print(f"ERROR: {e}")
+            self.registration_complete.emit(False, f"Error: {str(e)}")
+
+
+
+    def detect_stars(self, image):
+        """ Detects stars in an image using DAOStarFinder (FWHM=3.5). """
+        if image.ndim == 3:  # Convert color images to grayscale
+            image = np.mean(image, axis=2)
+
+        mean, median, std = sigma_clipped_stats(image)
+        daofind = DAOStarFinder(fwhm=3.5, threshold=4.0 * std)
+        sources = daofind(image - median)
+
+        if sources is None or len(sources) == 0:
+            print("DEBUG: No stars detected")
+            return np.array([])
+
+        
+        return np.vstack([sources['xcentroid'], sources['ycentroid']]).T  # (N, 2) shape
+
+    def detect_grid_stars(self, image):
+        """ Detects 3 brightest stars per 3x3 grid region while excluding a 5% border margin. """
+        print("DEBUG: Detecting stars in 3x3 grid with 5% border margin")
+        if image.ndim == 3:  
+            image = np.mean(image, axis=2)  # Convert to grayscale
+
+        h, w = image.shape
+        margin_x = int(w * 0.05)  # 5% margin on X
+        margin_y = int(h * 0.05)  # 5% margin on Y
+
+        # Define valid region inside margin
+        valid_x_min, valid_x_max = margin_x, w - margin_x
+        valid_y_min, valid_y_max = margin_y, h - margin_y
+
+        # Define grid within valid region
+        grid_x = np.linspace(valid_x_min, valid_x_max, 4, dtype=int)
+        grid_y = np.linspace(valid_y_min, valid_y_max, 4, dtype=int)
+
+        stars = []
+        
+        for i in range(len(grid_x) - 1):  # Avoid out-of-bounds
+            for j in range(len(grid_y) - 1):  # Avoid out-of-bounds
+                x_min, x_max = grid_x[i], grid_x[i + 1]
+                y_min, y_max = grid_y[j], grid_y[j + 1]
+
+                sub_img = image[y_min:y_max, x_min:x_max]
+                if sub_img.size == 0:
+                    continue  # Skip empty regions
+
+                if np.std(sub_img) > 0:
+                    local_stars = self.detect_stars(sub_img)
+                    if len(local_stars) > 0:
+                        # Convert to original image coordinates, ensuring they remain within valid bounds
+                        local_stars[:, 0] = np.clip(local_stars[:, 0] + x_min, valid_x_min, valid_x_max - 1)
+                        local_stars[:, 1] = np.clip(local_stars[:, 1] + y_min, valid_y_min, valid_y_max - 1)
+
+                        # Sort stars by brightness and select top 3 per region
+                        sorted_stars = sorted(local_stars, key=lambda s: image[int(s[1]), int(s[0])], reverse=True)
+                        stars.extend(sorted_stars[:6])  
+
+        return np.array(stars) if stars else np.array([])
+
+
+    def build_triangle_dict(self, coords):
+        """ Builds a dictionary mapping triangle invariants to star triangle sets. """
+        tri = Delaunay(coords)
+        tri_dict = {}
+        for simplex in tri.simplices:
+            pts = coords[simplex]
+            inv = self.compute_triangle_invariant(pts)
+            if inv is None:
+                continue
+            inv_key = (round(inv[0], 2), round(inv[1], 2))
+            tri_dict.setdefault(inv_key, []).append(simplex)
+        return tri_dict
+
+    def compute_triangle_invariant(self, tri_points):
+        """ Computes invariant features for a given triangle. """
+        d1 = np.linalg.norm(tri_points[0] - tri_points[1])
+        d2 = np.linalg.norm(tri_points[1] - tri_points[2])
+        d3 = np.linalg.norm(tri_points[2] - tri_points[0])
+        sides = sorted([d1, d2, d3])
+        if sides[0] == 0:
+            return None
+        return (sides[1] / sides[0], sides[2] / sides[0])
+
+    def compute_affine_transform_with_ransac(self, img_stars, ref_stars, ref_triangles, max_attempts=5):
+        """ Computes affine transformation using RANSAC recursion with constraints. """
+        attempt = 0
+        while attempt < max_attempts:
+            attempt += 1
+            print(f"DEBUG: Attempt {attempt} for affine transformation")
+
+            matches = []
+            for img_star in img_stars:
+                distances = np.linalg.norm(ref_stars - img_star, axis=1)
+                closest_idx = np.argmin(distances)
+                if distances[closest_idx] < 10:  
+                    matches.append((img_star, ref_stars[closest_idx]))
+
+            if len(matches) < 3:  
+                self.progress_update.emit("Not enough matching stars found, skipping image.")
+                return None
+
+            src_pts = np.array([m[0] for m in matches])
+            dst_pts = np.array([m[1] for m in matches])
+
+            transform, inliers = cv2.estimateAffinePartial2D(src_pts.reshape(-1, 1, 2), dst_pts.reshape(-1, 1, 2), method=cv2.LMEDS)
+
+            if transform is not None and self.is_valid_transform(transform):
+                return transform
+
+        self.progress_update.emit("Valid affine transform not found after multiple attempts, skipping image.")
+        return None
+
+    def is_valid_transform(self, matrix):
+        """ Ensures affine transform does not over-scale, skew, or flip the image. """
+        a, b, tx = matrix[0]
+        c, d, ty = matrix[1]
+
+        scale_x = np.sqrt(a ** 2 + c ** 2)
+        scale_y = np.sqrt(b ** 2 + d ** 2)
+        skew = np.abs((a * b + c * d) / (a ** 2 + c ** 2))
+
+        if not (0.5 <= scale_x <= 2.0 and 0.5 <= scale_y <= 2.0):
+            print(f"DEBUG: Scale out of bounds: scale_x={scale_x}, scale_y={scale_y}")
+            return False
+
+        if skew > 0.01:
+            print(f"DEBUG: Skew out of bounds: {skew}")
+            return False
+
+        return True
+
+    def apply_affine_transform(self, image, transform_matrix):
+        """ Applies affine transformation to align the image. """
+        h, w = image.shape[:2]
+        return cv2.warpAffine(image, transform_matrix, (w, h), flags=cv2.INTER_LINEAR)
+
+    def show_summary(self, success_count):
+        """ Displays a summary of processed images in a message box. """
+        total = len(self.files_to_align)
+        failed_count = len(self.failed_files)
+
+        summary_text = (
+            f"Star Registration Completed!\n\n"
+            f"Total Images Processed: {total}\n"
+            f"Successfully Aligned: {success_count}\n"
+            f"Failed Alignments: {failed_count}\n"
+        )
+
+        if failed_count > 0:
+            summary_text += "\nFailed Files:\n" + "\n".join([os.path.basename(f) for f in self.failed_files])
+
+        self.registration_complete.emit(True, summary_text)
+
+class StarRegistrationWindow(QWidget):
+    def __init__(self, image_manager=None):
+        super().__init__()
+        self.image_manager = image_manager  # Reference to the Image Manager
+        self.reference_image_path = None
+        self.files_to_align = []
+        self.output_directory = None
+        self.thread = None  # Store thread reference
+
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle("Star Registration")
+        self.setGeometry(200, 200, 600, 450)
+        main_layout = QVBoxLayout(self)
+
+        # ─────────────────────────────────────────
+        # Reference Image Selection
+        # ─────────────────────────────────────────
+        ref_layout = QHBoxLayout()
+        self.ref_label = QLabel("Reference Image:")
+        self.ref_path_label = QLabel("No reference selected")
+        self.ref_path_label.setWordWrap(True)
+
+        self.select_ref_slot_button = QPushButton("From Slot")
+        self.select_ref_slot_button.clicked.connect(self.select_reference_from_slot)
+
+        self.select_ref_file_button = QPushButton("From File")
+        self.select_ref_file_button.clicked.connect(self.select_reference_from_file)
+
+        ref_layout.addWidget(self.ref_label)
+        ref_layout.addWidget(self.ref_path_label)
+        ref_layout.addWidget(self.select_ref_slot_button)
+        ref_layout.addWidget(self.select_ref_file_button)
+
+        # ─────────────────────────────────────────
+        # Image Selection Section
+        # ─────────────────────────────────────────
+        file_selection_layout = QHBoxLayout()
+
+        self.add_files_button = QPushButton("Select Files")
+        self.add_files_button.clicked.connect(self.select_files_to_align)
+
+        self.add_directory_button = QPushButton("Select Directory")
+        self.add_directory_button.clicked.connect(self.select_directory_to_align)
+
+        file_selection_layout.addWidget(self.add_files_button)
+        file_selection_layout.addWidget(self.add_directory_button)
+
+        # ─────────────────────────────────────────
+        # TreeBox for Selected Files
+        # ─────────────────────────────────────────
+        self.tree_widget = QTreeWidget()
+        self.tree_widget.setColumnCount(1)
+        self.tree_widget.setHeaderLabels(["Files to Align"])
+        self.tree_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+        # Buttons for managing the TreeBox
+        tree_buttons_layout = QHBoxLayout()
+        self.remove_selected_button = QPushButton("Remove Selected")
+        self.remove_selected_button.clicked.connect(self.remove_selected_files)
+
+        self.clear_tree_button = QPushButton("Clear All")
+        self.clear_tree_button.clicked.connect(self.clear_tree)
+
+        tree_buttons_layout.addWidget(self.remove_selected_button)
+        tree_buttons_layout.addWidget(self.clear_tree_button)
+
+        # ─────────────────────────────────────────
+        # Output Directory Selection
+        # ─────────────────────────────────────────
+        output_layout = QHBoxLayout()
+        self.output_label = QLabel("Output Directory:")
+        self.output_path_label = QLabel("No directory selected")
+        self.output_path_label.setWordWrap(True)
+
+        self.select_output_button = QPushButton("Select Output Folder")
+        self.select_output_button.clicked.connect(self.select_output_directory)
+
+        output_layout.addWidget(self.output_label)
+        output_layout.addWidget(self.output_path_label)
+        output_layout.addWidget(self.select_output_button)
+
+        # ─────────────────────────────────────────
+        # Progress Display
+        # ─────────────────────────────────────────
+        self.progress_label = QLabel("Status: Waiting...")
+        self.progress_label.setStyleSheet("color: blue; font-weight: bold;")
+        
+        # ─────────────────────────────────────────
+        # Start Button
+        # ─────────────────────────────────────────
+        self.start_button = QPushButton("Start Registration")
+        self.start_button.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.start_button.clicked.connect(self.start_registration)
+
+        # ─────────────────────────────────────────
+        # Add widgets to main layout
+        # ─────────────────────────────────────────
+        main_layout.addLayout(ref_layout)
+        main_layout.addLayout(file_selection_layout)
+        main_layout.addWidget(self.tree_widget)
+        main_layout.addLayout(tree_buttons_layout)
+        main_layout.addLayout(output_layout)
+        main_layout.addWidget(self.progress_label)
+        main_layout.addWidget(self.start_button)
+
+    # ─────────────────────────────────────────
+    # Slot/File Selection for Reference Image
+    # ─────────────────────────────────────────
+    def select_reference_from_slot(self):
+        if self.image_manager:
+            available_slots = {i: f"Slot {i}" for i in range(self.image_manager.max_slots)}
+            slot, ok = QInputDialog.getItem(self, "Select Reference Slot", "Choose a reference image slot:", list(available_slots.values()), 0, False)
+            if ok:
+                slot_index = list(available_slots.values()).index(slot)
+                self.reference_image_path = f"Slot {slot_index}"
+                self.ref_path_label.setText(self.reference_image_path)
+
+    def select_reference_from_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Reference Image", "", "Images (*.png *.jpg *.jpeg *.tif *.tiff *.fits *.fit *.xisf);;All Files (*)")
+        if file_path:
+            self.reference_image_path = file_path
+            self.ref_path_label.setText(os.path.basename(file_path))
+
+    # ─────────────────────────────────────────
+    # File Selection for Alignment
+    # ─────────────────────────────────────────
+    def select_files_to_align(self):
+        files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Align", "", "Images (*.png *.jpg *.jpeg *.tif *.tiff *.fits *.fit *.xisf);;All Files (*)")
+        if files:
+            for file in files:
+                if file not in self.files_to_align:
+                    self.files_to_align.append(file)
+                    self.tree_widget.addTopLevelItem(QTreeWidgetItem([os.path.basename(file)]))
+
+    def select_directory_to_align(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Directory", "")
+        if directory:
+            supported_extensions = ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.fits', '.fit', '.xisf')
+            new_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.lower().endswith(supported_extensions)]
+            for file in new_files:
+                if file not in self.files_to_align:
+                    self.files_to_align.append(file)
+                    self.tree_widget.addTopLevelItem(QTreeWidgetItem([os.path.basename(file)]))
+
+    # ─────────────────────────────────────────
+    # Managing Files in TreeBox
+    # ─────────────────────────────────────────
+    def remove_selected_files(self):
+        selected_items = self.tree_widget.selectedItems()
+        for item in selected_items:
+            file_name = item.text(0)
+            for file_path in self.files_to_align:
+                if os.path.basename(file_path) == file_name:
+                    self.files_to_align.remove(file_path)
+                    break
+            index = self.tree_widget.indexOfTopLevelItem(item)
+            self.tree_widget.takeTopLevelItem(index)
+
+    def clear_tree(self):
+        self.tree_widget.clear()
+        self.files_to_align.clear()
+
+    # ─────────────────────────────────────────
+    # Output Directory Selection
+    # ─────────────────────────────────────────
+    def select_output_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory", "")
+        if directory:
+            self.output_directory = directory
+            self.output_path_label.setText(directory)
+
+    # ─────────────────────────────────────────
+    # Start Registration with Signal Handling
+    # ─────────────────────────────────────────
+    def start_registration(self):
+        if not self.reference_image_path:
+            QMessageBox.warning(self, "Missing Reference", "Please select a reference image before starting.")
+            return
+        if not self.files_to_align:
+            QMessageBox.warning(self, "No Files", "Please add files to align before starting.")
+            return
+        if not self.output_directory:
+            QMessageBox.warning(self, "No Output Directory", "Please select an output directory before starting.")
+            return
+
+        self.progress_label.setText("Status: Running...")
+        self.progress_label.setStyleSheet("color: green; font-weight: bold;")
+
+        self.thread = StarRegistrationThread(self.reference_image_path, self.files_to_align, self.output_directory)
+        self.thread.progress_update.connect(self.update_progress)
+        self.thread.registration_complete.connect(self.registration_finished)
+        self.thread.start()
+
+    def update_progress(self, message):
+        """Update the progress label with the latest status."""
+        self.progress_label.setText(f"Status: {message}")
+        QApplication.processEvents()
+
+    def registration_finished(self, success, message):
+        """Handle the completion of the registration process."""
+        color = "green" if success else "red"
+        self.progress_label.setText(f"Status: {message}")
+        self.progress_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+        if success:
+            QMessageBox.information(self, "Registration Complete", message)
+        else:
+            QMessageBox.warning(self, "Registration Error", message)
+
+
 class PlateSolver(QDialog):
     """
     A dialog class to handle plate solving.
@@ -11011,93 +11567,73 @@ class PSFViewer(QDialog):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.stats_table.setItem(row_index, col_index, item)
 
-@njit(parallel=True)
-def _cosmetic_correction_numba(padded, corrected, H, W, C, half_w, hot_sigma, cold_sigma):
-    """
-    Numba-compiled helper for local outlier correction.
-    padded   : (H + 2*half_w, W + 2*half_w, C) padded image
-    corrected: (H, W, C) array we write into
-    H, W, C  : Dimensions of the unpadded image
-    half_w   : half of window_size (e.g. 1 if window_size=3)
-    hot_sigma, cold_sigma: thresholds
-    """
-    window_size = half_w * 2 + 1
-    # Temporary array to hold the neighborhood pixel values (for median calc).
-    # For a 3×3 patch, that's 9 elements.
-    local_vals = np.empty((window_size * window_size,), dtype=np.float32)
 
-    for y in prange(H):
-        for x in range(W):
-            # Coordinates in the padded image
-            y_p = y + half_w
-            x_p = x + half_w
+@njit(parallel=True, fastmath=True)
+def _cosmetic_correction_numba_fixed(corrected, H, W, C, hot_sigma, cold_sigma):
+    """
+    Optimized Numba-compiled local outlier correction.
+    - Computes median and standard deviation from 8 surrounding pixels (excluding center).
+    - If the center pixel is greater than (median + hot_sigma * std_dev), it is replaced with the median.
+    - If the center pixel is less than (median - cold_sigma * std_dev), it is replaced with the median.
+    - Edge pixels are skipped (avoiding padding artifacts).
+    """
+    local_vals = np.empty(9, dtype=np.float32)  # Holds 8 surrounding pixels
 
-            for c_i in range(C):
-                # Extract the local patch
+    # Process pixels in parallel, skipping edges
+    for y in prange(1, H - 1):  # Skip first and last rows
+        for x in range(1, W - 1):  # Skip first and last columns
+            for c_i in prange(C):  # Parallelize over color channels too
                 k = 0
-                for dy in range(-half_w, half_w+1):
-                    for dx in range(-half_w, half_w+1):
-                        local_vals[k] = padded[y_p + dy, x_p + dx, c_i]
+                for dy in range(-1, 2):  # -1, 0, +1
+                    for dx in range(-1, 2):  # -1, 0, +1
+                        local_vals[k] = corrected[y + dy, x + dx, c_i]
                         k += 1
 
-                # Compute local median
-                # For 3×3, sorting 9 items is cheap:
-                local_vals.sort()
-                M = local_vals[len(local_vals)//2]  # middle item => median
+                # Compute median
+                M = np.median(local_vals)
 
-                # Median absolute deviation (MAD)
-                for n in range(len(local_vals)):
-                    local_vals[n] = abs(local_vals[n] - M)
-                local_vals.sort()
-                dev = 1.4826 * local_vals[len(local_vals)//2]  # scale by 1.4826
+                # Compute MAD manually
+                abs_devs = np.abs(local_vals - M)
+                MAD = np.median(abs_devs)
 
-                T = corrected[y, x, c_i]  # original pixel
-                # Check hot/cold
-                if T > M + hot_sigma * dev:
-                    corrected[y, x, c_i] = M
-                elif T < M - cold_sigma * dev:
-                    corrected[y, x, c_i] = M
+                # Convert MAD to an approximation of standard deviation
+                sigma_mad = 1.4826 * MAD  
 
+                T = corrected[y, x, c_i]  # **Center pixel**
+                threshold_high = M + (hot_sigma * sigma_mad)
+                threshold_low = M - (cold_sigma * sigma_mad)
+                # **Apply correction ONLY if center pixel is an outlier**
+                if T > threshold_high or T < threshold_low:
+                    corrected[y, x, c_i] = M  # Replace center pixel with median
 
 def bulk_cosmetic_correction_numba(image, hot_sigma=3.0, cold_sigma=3.0, window_size=3):
     """
-    Local outlier (hot/cold) correction accelerated by Numba.
-    - For each pixel, we get its window_size×window_size neighborhood,
-    compute the local median (M) & robust scale estimate (DEV),
-    then mark pixel as hot if T > M + hot_sigma*DEV or cold if T < M - cold_sigma*DEV,
-    in which case we replace T with M.
-
-    image      : np.ndarray, shape (H,W) or (H,W,3) in [0..1].
-    hot_sigma  : float, threshold above local median for "hot"
-    cold_sigma : float, threshold below local median for "cold"
-    window_size: int, e.g. 3 => 3×3 patch
-
-    returns an np.ndarray of the same shape with outliers replaced.
+    Optimized local outlier correction using Numba.
+    - Identifies hot and cold outliers based on local neighborhood statistics.
+    - Uses median and standard deviation from surrounding pixels to detect and replace outliers.
+    - Applies separate hot_sigma and cold_sigma thresholds.
+    - Skips edge pixels to avoid padding artifacts.
     """
+
     was_gray = False
-    if image.ndim == 2:  # shape (H, W)
+
+    if image.ndim == 2:  # Convert grayscale to 3D
+        H, W = image.shape
+        C = 1
         was_gray = True
-        image = image[:, :, np.newaxis]
 
-    H, W, C = image.shape
-    half_w = window_size // 2
+    else:
+        H, W, C = image.shape
 
-    # Reflect-pad the image for easy neighborhood extraction
-    padded = np.pad(
-        image,
-        pad_width=((half_w, half_w), (half_w, half_w), (0, 0)),
-        mode='reflect'
-    ).astype(np.float32)
 
-    # We'll operate on a copy so as not to modify the input.
+    # Copy the image for modification
     corrected = image.astype(np.float32).copy()
 
-    # Call the numba function
-    _cosmetic_correction_numba(padded, corrected, H, W, C, half_w, hot_sigma, cold_sigma)
+    # Apply fast correction (no padding, edges skipped)
+    _cosmetic_correction_numba_fixed(corrected, H, W, C, hot_sigma, cold_sigma)
 
     if was_gray:
-        # Squeeze back to 2D
-        corrected = corrected[:, :, 0]
+        corrected = corrected[:, :, 0]  # Convert back to 2D if grayscale
 
     return corrected
 
@@ -11247,8 +11783,8 @@ class SupernovaAsteroidHunterTab(QWidget):
                 # Numba correction
                 corrected = bulk_cosmetic_correction_numba(
                     img,
-                    hot_sigma=3.0,
-                    cold_sigma=3.0,
+                    hot_sigma=5.0,
+                    cold_sigma=5.0,
                     window_size=3
                 )
                 self.cosmetic_images[image_path] = corrected
@@ -13567,6 +14103,127 @@ class BlemishBlasterDialog(QDialog):
         super().closeEvent(event)
 
 
+
+def evaluate_polynomial(H: int, W: int, coeffs: np.ndarray, degree: int) -> np.ndarray:
+    """
+    Evaluates the polynomial function over the entire image domain.
+    """
+    xx, yy = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32), indexing="xy")
+    A_full = build_poly_terms(xx.ravel(), yy.ravel(), degree)
+    return (A_full @ coeffs).reshape(H, W)
+
+
+
+
+
+
+def build_poly_terms(x_array: np.ndarray, y_array: np.ndarray, degree: int) -> np.ndarray:
+    """
+    Precomputes polynomial basis terms efficiently using NumPy, supporting up to degree 6.
+    """
+    ones = np.ones_like(x_array, dtype=np.float32)
+
+    if degree == 1:
+        return np.column_stack((ones, x_array, y_array))
+
+    elif degree == 2:
+        return np.column_stack((ones, x_array, y_array, 
+                                x_array**2, x_array * y_array, y_array**2))
+
+    elif degree == 3:
+        return np.column_stack((ones, x_array, y_array, 
+                                x_array**2, x_array * y_array, y_array**2, 
+                                x_array**3, x_array**2 * y_array, x_array * y_array**2, y_array**3))
+
+    elif degree == 4:
+        return np.column_stack((ones, x_array, y_array, 
+                                x_array**2, x_array * y_array, y_array**2, 
+                                x_array**3, x_array**2 * y_array, x_array * y_array**2, y_array**3,
+                                x_array**4, x_array**3 * y_array, x_array**2 * y_array**2, x_array * y_array**3, y_array**4))
+
+    elif degree == 5:
+        return np.column_stack((ones, x_array, y_array, 
+                                x_array**2, x_array * y_array, y_array**2, 
+                                x_array**3, x_array**2 * y_array, x_array * y_array**2, y_array**3,
+                                x_array**4, x_array**3 * y_array, x_array**2 * y_array**2, x_array * y_array**3, y_array**4,
+                                x_array**5, x_array**4 * y_array, x_array**3 * y_array**2, x_array**2 * y_array**3, x_array * y_array**4, y_array**5))
+
+    elif degree == 6:
+        return np.column_stack((ones, x_array, y_array, 
+                                x_array**2, x_array * y_array, y_array**2, 
+                                x_array**3, x_array**2 * y_array, x_array * y_array**2, y_array**3,
+                                x_array**4, x_array**3 * y_array, x_array**2 * y_array**2, x_array * y_array**3, y_array**4,
+                                x_array**5, x_array**4 * y_array, x_array**3 * y_array**2, x_array**2 * y_array**3, x_array * y_array**4, y_array**5,
+                                x_array**6, x_array**5 * y_array, x_array**4 * y_array**2, x_array**3 * y_array**3, x_array**2 * y_array**4, x_array * y_array**5, y_array**6))
+
+    else:
+        raise ValueError(f"Unsupported polynomial degree={degree}. Max supported is 6.")
+
+
+
+
+def generate_sample_points(image: np.ndarray, num_points: int = 100) -> np.ndarray:
+    """
+    Generates sample points uniformly across the image.
+
+    - Places points in a uniform grid (no randomization).
+    - Avoids border pixels.
+    - Skips any points with value 0.000 or above 0.85.
+
+    Returns:
+        np.ndarray: Array of shape (N, 2) containing (x, y) coordinates of sample points.
+    """
+    H, W = image.shape[:2]
+    points = []
+
+    # Create a uniform grid (avoiding the border)
+    grid_size = int(np.sqrt(num_points))  # Roughly equal spacing
+    x_vals = np.linspace(10, W - 10, grid_size, dtype=int)  # Avoids border
+    y_vals = np.linspace(10, H - 10, grid_size, dtype=int)
+
+    for y in y_vals:
+        for x in x_vals:
+            # Skip values that are too dark (0.000) or too bright (> 0.85)
+            if np.any(image[int(y), int(x)] == 0.000) or np.any(image[int(y), int(x)] > 0.85):
+                continue  # Skip this pixel
+
+            points.append((int(x), int(y)))
+
+            if len(points) >= num_points:
+                return np.array(points, dtype=np.int32)  # Return only valid points
+
+    return np.array(points, dtype=np.int32)  # Return all collected points
+
+@njit(parallel=True, fastmath=True)
+def _numba_unstretch(image: np.ndarray, stretch_original_medians: np.ndarray, stretch_original_mins: np.ndarray) -> np.ndarray:
+    """
+    Numba-optimized function to undo the unlinked stretch.
+    Restores each channel separately.
+    """
+    H, W, C = image.shape
+    out = np.empty_like(image, dtype=np.float32)
+
+    for c in prange(C):  # Parallelize per channel
+        cmed_stretched = np.median(image[..., c])
+        orig_med = stretch_original_medians[c]
+        orig_min = stretch_original_mins[c]
+
+        if cmed_stretched != 0 and orig_med != 0:
+            for y in prange(H):
+                for x in range(W):
+                    r = image[y, x, c]
+                    numerator = (cmed_stretched - 1) * orig_med * r
+                    denominator = cmed_stretched * (orig_med + r - 1) - orig_med * r
+                    if denominator == 0:
+                        denominator = 1e-6  # Avoid division by zero
+                    out[y, x, c] = numerator / denominator
+
+            # Restore the original black point
+            out[..., c] += orig_min
+
+    return np.clip(out, 0, 1)  # Clip to valid range
+
+
 class PolyGradientRemoval:
     """
     A headless class that replicates the polynomial background removal
@@ -13617,39 +14274,42 @@ class PolyGradientRemoval:
         """
         # 1) Stretch
         stretched = self.pixel_math_stretch(self.image)
+        print("stretching")
 
         # 2) Downsample
         small_stretched = self.downsample_image(stretched, self.downsample_scale)
         h_s, w_s = small_stretched.shape[:2]
+        print("downsampling")
 
         # 3) Build an exclusion mask in the small domain that:
-        #    - Skips zero-valued pixels
-        #    - Skips user_exclusion_mask if provided
-        final_excl_mask_small = self.build_exclusion_mask_small(small_stretched, user_exclusion_mask)
 
         # 4) Generate sample points from corners/borders/quartiles
-        sample_points = self.generate_sample_points(
+        sample_points = generate_sample_points(
             small_stretched,
-            num_points=self.num_sample_points,
-            exclusion_mask=final_excl_mask_small
+            num_points=self.num_sample_points
         )
+        print("sample points generated")
 
         # 5) Fit polynomial on the downsampled image
         poly_background_small = self.fit_polynomial_gradient(
             small_stretched, sample_points, degree=self.poly_degree
         )
+        print("fit poly")
 
         # Upscale background to full size
         poly_background = self.upscale_background(
             poly_background_small, stretched.shape[:2]
         )
+        print("upscale")
 
         # Subtract
         after_poly = stretched - poly_background
+        print("subtracted")
 
         # Re-normalize median to original
         original_median = np.median(stretched)
         after_poly = self.normalize_image(after_poly, original_median)
+        print("normalized")
 
         # Clip
         after_poly = np.clip(after_poly, 0, 1)
@@ -13739,32 +14399,102 @@ class PolyGradientRemoval:
         return image
 
 
+    def pixel_math_stretch(self, image: np.ndarray) -> np.ndarray:
+        """
+        Unlinked linear stretch using your existing Numba functions.
+
+        Steps:
+        1) If single-channel, replicate to 3-ch so we can store stats & do consistent logic.
+        2) For each channel c: subtract the channel's min => data is >= 0.
+        3) Compute the median after min subtraction for that channel.
+        4) Call the appropriate Numba function:
+            - If single-channel (was originally 1-ch), call _numba_mono_final_formula
+            on the 1-ch array.
+            - If 3-ch color, call _numba_color_final_formula_unlinked.
+        5) Clip to [0,1].
+        6) Store self.stretch_original_mins / medians so we can unstretch later.
+        """
+        target_median = 0.25
+
+        # 1) Handle single-channel => replicate to 3 channels
+        if image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 1):
+            self.was_single_channel = True
+            image_3ch = np.stack([image.squeeze()] * 3, axis=-1)
+        else:
+            self.was_single_channel = False
+            image_3ch = image
+
+        image_3ch = image_3ch.astype(np.float32, copy=True)
+
+        H, W, C = image_3ch.shape
+        # We assume C=3 now.
+
+        self.stretch_original_mins = []
+        self.stretch_original_medians = []
+
+        # 2) Subtract min per channel
+        for c in range(C):
+            cmin = image_3ch[..., c].min()
+            image_3ch[..., c] -= cmin
+            self.stretch_original_mins.append(float(cmin))
+
+        # 3) Compute median after min subtraction
+        medians_after_sub = []
+        for c in range(C):
+            cmed = float(np.median(image_3ch[..., c]))
+            medians_after_sub.append(cmed)
+        self.stretch_original_medians = medians_after_sub
+
+        # 4) Apply the final formula with your Numba functions
+        if self.was_single_channel:
+            # If originally single-channel, let's do a single pass with _numba_mono_final_formula
+            # on the single channel. We can do that by extracting one channel from image_3ch.
+            # Then replicate the result to 3 channels, or keep it as 1-ch?
+            # Typically we keep it as 1-ch in the end, so let's do that.
+
+            # We'll just pick channel 0, run the mono formula, store it back in a 2D array.
+            mono_array = image_3ch[..., 0]  # shape (H,W)
+            cmed = medians_after_sub[0]     # The median for that channel
+            # We call the numba function
+            stretched_mono = _numba_mono_final_formula(mono_array, cmed, target_median)
+
+            # Now place it back into image_3ch for consistency
+            for c in range(3):
+                image_3ch[..., c] = stretched_mono
+        else:
+            # 3-channel unlinked
+            medians_rescaled = np.array(medians_after_sub, dtype=np.float32)
+            # 'image_3ch' is our 'rescaled'
+            stretched_3ch = _numba_color_final_formula_unlinked(
+                image_3ch, medians_rescaled, target_median
+            )
+            image_3ch = stretched_3ch
+
+        # 5) Clip to [0..1]
+        np.clip(image_3ch, 0.0, 1.0, out=image_3ch)
+        image = image_3ch
+        return image
+
+
     def unstretch_image(self, image: np.ndarray) -> np.ndarray:
         """
-        Undo the above unlinked stretch, returning to original domain.
+        Calls the Numba-optimized unstretch function.
         """
         image = image.astype(np.float32, copy=True)
 
-        for c in range(3):
-            cmed_stretched = np.median(image[..., c])
-            orig_med = self.stretch_original_medians[c]
-            orig_min = self.stretch_original_mins[c]
+        # Convert lists to NumPy arrays for efficient Numba processing
+        stretch_original_medians = np.array(self.stretch_original_medians, dtype=np.float32)
+        stretch_original_mins = np.array(self.stretch_original_mins, dtype=np.float32)
 
-            if cmed_stretched != 0 and orig_med != 0:
-                numerator = (cmed_stretched - 1)*orig_med * image[..., c]
-                denominator = cmed_stretched*(orig_med + image[..., c] - 1) - orig_med*image[..., c]
-                denominator = np.where(denominator == 0, 1e-6, denominator)
-                image[..., c] = numerator/denominator
-
-            image[..., c] += orig_min
-
-        image = np.clip(image, 0, 1)
+        # Call the Numba function
+        unstretched = _numba_unstretch(image, stretch_original_medians, stretch_original_mins)
 
         if self.was_single_channel:
-            # revert to single channel
-            image = np.mean(image, axis=2, keepdims=True)
+            # Convert back to grayscale
+            unstretched = np.mean(unstretched, axis=2, keepdims=True)
 
-        return image
+        return unstretched
+
 
     # ---------------------------------------------------------------
     # Helper: Downsample
@@ -13778,348 +14508,80 @@ class PolyGradientRemoval:
         new_h = max(1, h//scale)
         return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-    # ---------------------------------------------------------------
-    # Helper: Build an Exclusion Mask in the Small Domain
-    # ---------------------------------------------------------------
-    def build_exclusion_mask_small(
-        self, small_image: np.ndarray, user_exclusion_mask: np.ndarray = None
-    ) -> np.ndarray:
-        """
-        Creates a boolean mask in the small (downsampled) domain that excludes:
-          - Any pixel with a zero in any channel
-          - user_exclusion_mask if provided (also downsampled)
 
-        Returns shape=(h_small,w_small), bool
-        """
-        h_s, w_s = small_image.shape[:2]
-
-        # 1) Zero-value mask
-        # If color => skip any pixel that has a 0 in any channel
-        # If gray => skip pixel if it's 0
-        if small_image.ndim == 3 and small_image.shape[2] == 3:
-            nonzero_mask = np.all(small_image > 0, axis=2)
-        else:
-            nonzero_mask = (small_image > 0)
-
-        # 2) If user_exclusion_mask is provided, downsample it and combine
-        if user_exclusion_mask is not None:
-            # user_exclusion_mask is presumably the size of the original image
-            # We downsample it to match the small domain
-            h_full, w_full = user_exclusion_mask.shape
-            # Convert to uint8 for resizing with nearest
-            mask_u8 = user_exclusion_mask.astype(np.uint8)
-            small_mask = cv2.resize(mask_u8, (w_s, h_s), interpolation=cv2.INTER_NEAREST)
-            final_mask = (small_mask > 0) & nonzero_mask
-        else:
-            final_mask = nonzero_mask
-
-        return final_mask
-
-    # ---------------------------------------------------------------
-    # 4) Generate Sample Points (the exact snippet from GradientRemovalDialog)
-    # ---------------------------------------------------------------
-    def generate_sample_points(
-        self,
-        image: np.ndarray,
-        num_points: int = 25,
-        exclusion_mask: np.ndarray = None
-    ) -> np.ndarray:
-        """
-        Replicates the sample-point logic from GradientRemovalDialog:
-          - corners + border points
-          - random points in quartiles
-          - gradient_descent_to_dim_spot
-          - skip bright half
-          - skip any area where exclusion_mask is False
-        """
-        h, w = image.shape[:2]
-        points = []
-
-        def valid_mask(x_, y_):
-            return (
-                0 <= x_ < w and
-                0 <= y_ < h and
-                (exclusion_mask is None or exclusion_mask[y_, x_])
-            )
-
-        # border_margin = 10
-        border_margin = 10
-
-        # Corner points
-        corners = [
-            (border_margin, border_margin),
-            (w - border_margin - 1, border_margin),
-            (border_margin, h - border_margin - 1),
-            (w - border_margin - 1, h - border_margin - 1)
-        ]
-        for (x_, y_) in corners:
-            if valid_mask(x_, y_):
-                x_new, y_new = self.gradient_descent_to_dim_spot(image, x_, y_)
-                if valid_mask(x_new, y_new):
-                    points.append((x_new, y_new))
-
-        # Top and bottom borders
-        for x_ in np.linspace(border_margin, w - border_margin, 5, dtype=int):
-            # top
-            if valid_mask(x_, border_margin):
-                xt, yt = self.gradient_descent_to_dim_spot(image, x_, border_margin)
-                if valid_mask(xt, yt):
-                    points.append((xt, yt))
-
-            # bottom
-            yb = h - border_margin - 1
-            if valid_mask(x_, yb):
-                xb, yb2 = self.gradient_descent_to_dim_spot(image, x_, yb)
-                if valid_mask(xb, yb2):
-                    points.append((xb, yb2))
-
-        # Left & right
-        for y_ in np.linspace(border_margin, h - border_margin, 5, dtype=int):
-            # left
-            if valid_mask(border_margin, y_):
-                xl, yl = self.gradient_descent_to_dim_spot(image, border_margin, y_)
-                if valid_mask(xl, yl):
-                    points.append((xl, yl))
-
-            # right
-            xr = w - border_margin - 1
-            if valid_mask(xr, y_):
-                xr2, yr2 = self.gradient_descent_to_dim_spot(image, xr, y_)
-                if valid_mask(xr2, yr2):
-                    points.append((xr2, yr2))
-
-        # Random quartiles
-        quartiles = self.divide_into_quartiles(image)
-        half_h, half_w = h//2, w//2
-
-        def sub_offset(k):
-            if "top" in k:
-                oy = 0
-            else:
-                oy = half_h
-            if "left" in k:
-                ox = 0
-            else:
-                ox = half_w
-            return (oy, ox)
-
-        for key, quartile in quartiles.items():
-            hq, wq = quartile.shape[:2]
-            offset_y, offset_x = sub_offset(key)
-
-            # Convert quartile to grayscale if needed
-            if quartile.ndim == 3 and quartile.shape[2] == 3:
-                lum = np.dot(quartile[..., :3], [0.2989, 0.5870, 0.1140])
-            else:
-                lum = quartile
-
-            # Exclude top 50% bright
-            mask_bright = self.exclude_bright_regions(lum, 0.5)
-
-            # Combine with the main exclusion_mask if present
-            if exclusion_mask is not None:
-                quart_excl = exclusion_mask[offset_y:offset_y + hq, offset_x:offset_x + wq]
-                combined_mask = mask_bright & quart_excl
-            else:
-                combined_mask = mask_bright
-
-            eligible_indices = np.argwhere(combined_mask)
-            if len(eligible_indices) == 0:
-                continue
-
-            num_points_in_quartile = min(len(eligible_indices), self.num_sample_points//4)
-            selected_indices = eligible_indices[np.random.choice(len(eligible_indices), num_points_in_quartile, replace=False)]
-
-            for (yy_, xx_) in selected_indices:
-                y_coord = offset_y + yy_
-                x_coord = offset_x + xx_
-
-                x_new, y_new = self.gradient_descent_to_dim_spot(image, x_coord, y_coord)
-                if valid_mask(x_new, y_new):
-                    points.append((x_new, y_new))
-
-        return np.array(points, dtype=np.int32)
-
-    def gradient_descent_to_dim_spot(self, image, x, y, max_iterations=10, patch_size=5):
-        """
-        Same as in GradientRemovalDialog: move (x,y) to a dimmer neighbor
-        based on median of a local patch.
-        """
-        half_patch = patch_size//2
-        if image.ndim == 3:
-            h, w, _ = image.shape
-            lum = np.dot(image[..., :3], [0.2989, 0.5870, 0.1140])
-        else:
-            h, w = image.shape
-            lum = image
-
-        for _ in range(max_iterations):
-            xmin, xmax = max(0, x-half_patch), min(w, x+half_patch+1)
-            ymin, ymax = max(0, y-half_patch), min(h, y+half_patch+1)
-            patch = lum[ymin:ymax, xmin:xmax]
-            current_val = np.median(patch)
-
-            neighbors = [
-                (nx, ny)
-                for nx in range(max(0, x-1), min(w, x+2))
-                for ny in range(max(0, y-1), min(h, y+2))
-                if (nx, ny) != (x, y)
-            ]
-
-            def local_median(coord):
-                nx, ny = coord
-                xmin_n, xmax_n = max(0, nx-half_patch), min(w, nx+half_patch+1)
-                ymin_n, ymax_n = max(0, ny-half_patch), min(h, ny+half_patch+1)
-                npatch = lum[ymin_n:ymax_n, xmin_n:xmax_n]
-                return np.median(npatch)
-
-            dimmest_neighbor = min(neighbors, key=local_median)
-            dimmest_val = local_median(dimmest_neighbor)
-
-            if dimmest_val >= current_val:
-                break
-
-            x, y = dimmest_neighbor
-
-        return (x, y)
-
-    def divide_into_quartiles(self, image: np.ndarray) -> dict:
-        """
-        Splits 'image' into top_left, top_right, bottom_left, bottom_right subimages.
-        """
-        h, w = image.shape[:2]
-        half_h, half_w = h//2, w//2
-        return {
-            'top_left': image[:half_h, :half_w],
-            'top_right': image[:half_h, half_w:],
-            'bottom_left': image[half_h:, :half_w],
-            'bottom_right': image[half_h:, half_w:]
-        }
-
-    def exclude_bright_regions(self, arr: np.ndarray, fraction: float=0.5) -> np.ndarray:
-        """
-        Returns a bool mask where True => arr < threshold, 
-        skipping the top 'fraction' of bright pixels.
-        """
-        flat = arr.flatten()
-        thresh = np.percentile(flat, 100*(1-fraction))
-        return arr < thresh
 
     # ---------------------------------------------------------------
     # 5) Fit Polynomial
     # ---------------------------------------------------------------
-    def fit_polynomial_gradient(
-        self,
-        image: np.ndarray,
-        sample_points: np.ndarray,
-        degree: int = 2,
-        patch_size: int = 15
-    ) -> np.ndarray:
+    def fit_polynomial_gradient(self, image: np.ndarray, sample_points: np.ndarray, degree: int = 2, patch_size: int = 15) -> np.ndarray:
         """
-        The same patch-based polynomial fitting from GradientRemovalDialog.
-        For each sample point, we take the median of a patch around it => z.
-        Then solve for polynomial coeffs. Then evaluate for the entire image.
+        Optimized polynomial background fitting.
+        - Extracts sample points using vectorized NumPy median calculations.
+        - Solves for polynomial coefficients in parallel.
+        - Precomputes polynomial basis terms for efficiency.
         """
-        h, w = image.shape[:2]
+
+        H, W = image.shape[:2]
         half_patch = patch_size // 2
+        num_samples = len(sample_points)
 
-        x_coords = []
-        y_coords = []
-        z_vals = []
+        # Convert sample points to NumPy arrays
+        sample_points = np.array(sample_points, dtype=np.int32)
+        x_coords, y_coords = sample_points[:, 0], sample_points[:, 1]
 
+        # Precompute polynomial design matrix
+        A = build_poly_terms(x_coords, y_coords, degree)
+
+        # Extract sample values efficiently
         if image.ndim == 3 and image.shape[2] == 3:
-            # color => do a channel-by-channel approach
+            # Color image
             background = np.zeros_like(image, dtype=np.float32)
             for c in range(3):
-                x_coords = []
-                y_coords = []
-                z_vals = []
-                for (sx, sy) in sample_points:
-                    xmin, xmax = max(0, sx-half_patch), min(w, sx+half_patch+1)
-                    ymin, ymax = max(0, sy-half_patch), min(h, sy+half_patch+1)
-                    patch = image[ymin:ymax, xmin:xmax, c]
-                    z_vals.append(np.median(patch))
-                    x_coords.append(sx)
-                    y_coords.append(sy)
+                # Extract patches and compute medians using vectorized NumPy operations
+                z_vals = np.array([
+                    np.median(image[max(0, y-half_patch):min(H, y+half_patch+1),
+                                    max(0, x-half_patch):min(W, x+half_patch+1), c])
+                    for x, y in zip(x_coords, y_coords)
+                ], dtype=np.float32)
 
-                z_vals = np.array(z_vals, dtype=np.float32)
-                x_coords = np.array(x_coords, dtype=np.float32)
-                y_coords = np.array(y_coords, dtype=np.float32)
+                # Solve for polynomial coefficients
+                coeffs = np.linalg.lstsq(A, z_vals, rcond=None)[0]
 
-                # build design matrix
-                A = self.build_poly_terms(x_coords, y_coords, degree)
-                coeffs, _, _, _ = np.linalg.lstsq(A, z_vals, rcond=None)
+                # Generate full polynomial background
+                background[..., c] = evaluate_polynomial(H, W, coeffs, degree)
 
-                # Evaluate
-                xx, yy = np.meshgrid(np.arange(w), np.arange(h))
-                A_full = self.build_poly_terms(xx.flatten().astype(np.float32), yy.flatten().astype(np.float32), degree)
-                bg_channel = (A_full @ coeffs).reshape(h, w)
-                background[..., c] = bg_channel
-
-            return background
         else:
-            # grayscale
-            background = np.zeros((h,w), dtype=np.float32)
-            for (sx, sy) in sample_points:
-                xmin, xmax = max(0, sx-half_patch), min(w, sx+half_patch+1)
-                ymin, ymax = max(0, sy-half_patch), min(h, sy+half_patch+1)
-                patch = image[ymin:ymax, xmin:xmax]
-                z_vals.append(np.median(patch))
-                x_coords.append(sx)
-                y_coords.append(sy)
+            # Grayscale image
+            background = np.zeros((H, W), dtype=np.float32)
 
-            z_vals = np.array(z_vals, dtype=np.float32)
-            x_coords = np.array(x_coords, dtype=np.float32)
-            y_coords = np.array(y_coords, dtype=np.float32)
+            z_vals = np.array([
+                np.median(image[max(0, y-half_patch):min(H, y+half_patch+1),
+                                max(0, x-half_patch):min(W, x+half_patch+1)])
+                for x, y in zip(x_coords, y_coords)
+            ], dtype=np.float32)
 
-            A = self.build_poly_terms(x_coords, y_coords, degree)
-            coeffs, _, _, _ = np.linalg.lstsq(A, z_vals, rcond=None)
+            # Solve for polynomial coefficients
+            coeffs = np.linalg.lstsq(A, z_vals, rcond=None)[0]
 
-            xx, yy = np.meshgrid(np.arange(w), np.arange(h))
-            A_full = self.build_poly_terms(xx.flatten().astype(np.float32), yy.flatten().astype(np.float32), degree)
-            bg_gray = (A_full @ coeffs).reshape(h, w).astype(np.float32)
-            background = bg_gray
-            return background
+            # Generate full polynomial background
+            background = evaluate_polynomial(H, W, coeffs, degree)
 
-    def build_poly_terms(self, x_array: np.ndarray, y_array: np.ndarray, degree: int):
-        """
-        For degree=1 => [1, x, y]
-        For degree=2 => [1, x, y, x^2, x*y, y^2]
-        """
-        if degree == 1:
-            return np.column_stack([
-                np.ones_like(x_array),
-                x_array,
-                y_array
-            ])
-        elif degree == 2:
-            return np.column_stack([
-                np.ones_like(x_array),
-                x_array,
-                y_array,
-                x_array**2,
-                x_array*y_array,
-                y_array**2
-            ])
-        else:
-            raise ValueError(f"Unsupported polynomial degree={degree}.")
-
+        return background
     # ---------------------------------------------------------------
     # 6) Upscale
     # ---------------------------------------------------------------
     def upscale_background(self, background: np.ndarray, out_shape: tuple) -> np.ndarray:
         """
-        Resizes 'background' to out_shape=(H,W).
+        Resizes 'background' to out_shape=(H,W) using OpenCV interpolation.
         """
         oh, ow = out_shape
+
         if background.ndim == 3 and background.shape[2] == 3:
-            big = np.zeros((oh, ow, 3), dtype=np.float32)
-            for c in range(3):
-                big[..., c] = cv2.resize(background[..., c], (ow, oh), interpolation=cv2.INTER_LINEAR)
-            return big
+            # Resizing each channel efficiently without looping in Python
+            return np.stack([cv2.resize(background[..., c], (ow, oh), interpolation=cv2.INTER_LINEAR)
+                            for c in range(3)], axis=-1)
         else:
             return cv2.resize(background, (ow, oh), interpolation=cv2.INTER_LINEAR).astype(np.float32)
-
     # ---------------------------------------------------------------
     # 7) Normalize
     # ---------------------------------------------------------------
@@ -19829,7 +20291,7 @@ class BlinkTab(QWidget):
             # Collect all image file paths recursively
             new_file_paths = []
             for root, _, files in os.walk(directory):
-                for file in files:
+                for file in sorted(files, key=str.lower):  # 🔹 Sort alphabetically (case-insensitive)
                     if file.lower().endswith(supported_extensions):
                         full_path = os.path.join(root, file)
                         if full_path not in self.image_paths:  # Avoid duplicates
@@ -19839,6 +20301,7 @@ class BlinkTab(QWidget):
                 self.loadImages(new_file_paths)
             else:
                 QMessageBox.information(self, "No Images Found", "No supported image files were found in the selected directory.")
+
 
     def clearImages(self):
         """Clear all loaded images and reset the tree view."""
@@ -19850,6 +20313,7 @@ class BlinkTab(QWidget):
             QMessageBox.StandardButton.No
         )
         if confirmation == QMessageBox.StandardButton.Yes:
+            self.stop_playback()
             self.image_paths.clear()
             self.loaded_images.clear()
             self.image_labels.clear()
@@ -23776,6 +24240,102 @@ class StatisticalStretchProcessingThread(QThread):
         # Emit the result once done
         self.preview_generated.emit(stretched_image)
 
+@njit(parallel=True, fastmath=True)
+def applyPixelMath_numba(image_array, amount):
+    factor = 3 ** amount
+    denom_factor = 3 ** amount - 1
+    height, width, channels = image_array.shape
+    output = np.empty_like(image_array, dtype=np.float32)
+
+    for y in prange(height):
+        for x in prange(width):
+            for c in prange(channels):
+                val = (factor * image_array[y, x, c]) / (denom_factor * image_array[y, x, c] + 1)
+                output[y, x, c] = min(max(val, 0.0), 1.0)  # Equivalent to np.clip()
+    
+    return output
+
+@njit(parallel=True, fastmath=True)
+def adjust_saturation_numba(image_array, saturation_factor):
+    height, width, channels = image_array.shape
+    output = np.empty_like(image_array, dtype=np.float32)
+
+    for y in prange(int(height)):  # Ensure y is an integer
+        for x in prange(int(width)):  # Ensure x is an integer
+            r, g, b = image_array[int(y), int(x)]  # Force integer indexing
+
+            # Convert RGB to HSV manually
+            max_val = max(r, g, b)
+            min_val = min(r, g, b)
+            delta = max_val - min_val
+
+            # Compute Hue (H)
+            if delta == 0:
+                h = 0
+            elif max_val == r:
+                h = (60 * ((g - b) / delta) + 360) % 360
+            elif max_val == g:
+                h = (60 * ((b - r) / delta) + 120) % 360
+            else:
+                h = (60 * ((r - g) / delta) + 240) % 360
+
+            # Compute Saturation (S)
+            s = (delta / max_val) if max_val != 0 else 0
+            s *= saturation_factor  # Apply saturation adjustment
+            s = min(max(s, 0.0), 1.0)  # Clip saturation
+
+            # Convert back to RGB
+            if s == 0:
+                r, g, b = max_val, max_val, max_val
+            else:
+                c = s * max_val
+                x_val = c * (1 - abs((h / 60) % 2 - 1))
+                m = max_val - c
+
+                if 0 <= h < 60:
+                    r, g, b = c, x_val, 0
+                elif 60 <= h < 120:
+                    r, g, b = x_val, c, 0
+                elif 120 <= h < 180:
+                    r, g, b = 0, c, x_val
+                elif 180 <= h < 240:
+                    r, g, b = 0, x_val, c
+                elif 240 <= h < 300:
+                    r, g, b = x_val, 0, c
+                else:
+                    r, g, b = c, 0, x_val
+
+                r, g, b = r + m, g + m, b + m  # Add m to shift brightness
+
+            # ✅ Fix: Explicitly cast indices to integers
+            output[int(y), int(x), 0] = r
+            output[int(y), int(x), 1] = g
+            output[int(y), int(x), 2] = b
+
+    return output
+
+
+
+
+@njit(parallel=True, fastmath=True)
+def applySCNR_numba(image_array):
+    height, width, _ = image_array.shape
+    output = np.empty_like(image_array, dtype=np.float32)
+
+    for y in prange(int(height)):
+        for x in prange(int(width)):
+            r, g, b = image_array[y, x]
+            g = min(g, (r + b) / 2)  # Reduce green to the average of red & blue
+            
+            # ✅ Fix: Assign channels individually instead of a tuple
+            output[int(y), int(x), 0] = r
+            output[int(y), int(x), 1] = g
+            output[int(y), int(x), 2] = b
+
+
+    return output
+
+
 # Thread for star stretch background processing
 class ProcessingThread(QThread):
     preview_generated = pyqtSignal(np.ndarray)
@@ -23788,43 +24348,18 @@ class ProcessingThread(QThread):
         self.scnr_enabled = scnr_enabled
 
     def run(self):
-        stretched_image = self.applyPixelMath(self.image, self.stretch_factor)
-        stretched_image = self.applyColorSaturation(stretched_image, self.sat_amount)
+        # Apply fast pixel math
+        stretched_image = applyPixelMath_numba(self.image, self.stretch_factor)
+
+        # Apply saturation adjustment
+        stretched_image = adjust_saturation_numba(stretched_image, self.sat_amount)
+
+        # Apply SCNR if enabled
         if self.scnr_enabled:
-            stretched_image = self.applySCNR(stretched_image)
+            stretched_image = applySCNR_numba(stretched_image)
+
+        # Emit the processed image
         self.preview_generated.emit(stretched_image)
-
-    def applyPixelMath(self, image_array, amount):
-        expression = (3 ** amount * image_array) / ((3 ** amount - 1) * image_array + 1)
-        return np.clip(expression, 0, 1)
-
-    def applyColorSaturation(self, image_array, satAmount):
-        saturationLevel = [
-            [0.0, satAmount * 0.4],
-            [0.5, satAmount * 0.7],
-            [1.0, satAmount * 0.4]
-        ]
-        return self.adjust_saturation(image_array, saturationLevel)
-
-    def adjust_saturation(self, image_array, saturation_level):
-        hsv_image = np.array(Image.fromarray((image_array * 255).astype(np.uint8)).convert('HSV')) / 255.0
-        hsv_image[..., 1] *= saturation_level[1][1]
-        hsv_image[..., 1] = np.clip(hsv_image[..., 1], 0, 1)
-        rgb_image = Image.fromarray((hsv_image * 255).astype(np.uint8), 'HSV').convert('RGB')
-        return np.array(rgb_image) / 255.0
-
-    def applySCNR(self, image_array):
-        red_channel = image_array[..., 0]
-        green_channel = image_array[..., 1]
-        blue_channel = image_array[..., 2]
-
-        # Apply green neutralization where green is higher than red and blue
-        mask = green_channel > np.maximum(red_channel, blue_channel)
-        green_channel[mask] = np.maximum(red_channel[mask], blue_channel[mask])
-
-        # Recombine the channels
-        image_array[..., 1] = green_channel
-        return np.clip(image_array, 0, 1)
 
 class StarStretchTab(QWidget):
     def __init__(self, image_manager):
@@ -25829,7 +26364,7 @@ class CurveEditor(QGraphicsView):
             self.updateCurve()
         super().keyPressEvent(event)
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def apply_lut_gray(image_in, lut):
     """
     Numba-accelerated application of 'lut' to a single-channel image_in in [0..1].
@@ -25849,7 +26384,7 @@ def apply_lut_gray(image_in, lut):
 
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def apply_lut_color(image_in, lut):
     """
     Numba-accelerated application of 'lut' to a 3-channel image_in in [0..1].
@@ -25870,7 +26405,7 @@ def apply_lut_color(image_in, lut):
 
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def apply_lut_mono_inplace(array2d, lut):
     """
     In-place LUT application on a single-channel 2D array in [0..1].
@@ -25888,7 +26423,7 @@ def apply_lut_mono_inplace(array2d, lut):
                 idx = size_lut
             array2d[y, x] = lut[idx]
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def apply_lut_color_inplace(array3d, lut):
     """
     In-place LUT application on a 3-channel array in [0..1].
@@ -25944,7 +26479,7 @@ _M_xyz2rgb = np.array([
     [ 0.0556434, -0.2040259,  1.0572252]
 ], dtype=np.float32)
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def rgb_to_xyz_numba(rgb):
     """
     Convert an image from sRGB to XYZ (D65).
@@ -25967,7 +26502,7 @@ def rgb_to_xyz_numba(rgb):
             out[y, x, 2] = Z
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def xyz_to_rgb_numba(xyz):
     """
     Convert an image from XYZ (D65) to sRGB.
@@ -26009,7 +26544,7 @@ def f_lab_numba(t):
             out.flat[i] = val/(3*delta*delta) + (4/29)
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def xyz_to_lab_numba(xyz):
     """
     xyz => shape(H,W,3), in D65. 
@@ -26033,7 +26568,7 @@ def xyz_to_lab_numba(xyz):
             out[y, x, 2] = b
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def lab_to_xyz_numba(lab):
     """
     lab => shape(H,W,3): L in [0..100], a,b in ~[-128..127].
@@ -26072,7 +26607,7 @@ def lab_to_xyz_numba(lab):
             out[y, x, 2] = Z
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def rgb_to_hsv_numba(rgb):
     H, W, _ = rgb.shape
     out = np.empty((H,W,3), dtype=np.float32)
@@ -26103,7 +26638,7 @@ def rgb_to_hsv_numba(rgb):
             out[y,x,2] = v
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def hsv_to_rgb_numba(hsv):
     H, W, _ = hsv.shape
     out = np.empty((H,W,3), dtype=np.float32)
@@ -29276,9 +29811,10 @@ class PerfectPalettePickerTab(QWidget):
         event.accept()
 
 class NBtoRGBstarsTab(QWidget):
-    def __init__(self, image_manager=None):
+    def __init__(self, image_manager=None, parent=None):
         super().__init__()
         self.image_manager = image_manager  # Reference to the ImageManager
+        self.parent_window = parent
         self.initUI()
         self.ha_image = None
         self.oiii_image = None
@@ -29325,25 +29861,25 @@ class NBtoRGBstarsTab(QWidget):
 
         # Ha, OIII, SII image selections
         self.haButton = QPushButton('Select Ha Image', self)
-        self.haButton.clicked.connect(lambda: self.selectImage('Ha'))
+        self.haButton.clicked.connect(lambda: self.load_image('Ha'))
         left_layout.addWidget(self.haButton)
         self.haLabel = QLabel('No Ha image selected', self)
         left_layout.addWidget(self.haLabel)
 
         self.oiiiButton = QPushButton('Select OIII Image', self)
-        self.oiiiButton.clicked.connect(lambda: self.selectImage('OIII'))
+        self.oiiiButton.clicked.connect(lambda: self.load_image('OIII'))
         left_layout.addWidget(self.oiiiButton)
         self.oiiiLabel = QLabel('No OIII image selected', self)
         left_layout.addWidget(self.oiiiLabel)
 
         self.siiButton = QPushButton('Select SII Image (Optional)', self)
-        self.siiButton.clicked.connect(lambda: self.selectImage('SII'))
+        self.siiButton.clicked.connect(lambda: self.load_image('SII'))
         left_layout.addWidget(self.siiButton)
         self.siiLabel = QLabel('No SII image selected', self)
         left_layout.addWidget(self.siiLabel)
 
         self.oscButton = QPushButton('Select OSC Stars Image (Optional)', self)
-        self.oscButton.clicked.connect(lambda: self.selectImage('OSC'))
+        self.oscButton.clicked.connect(lambda: self.load_image('OSC'))
         left_layout.addWidget(self.oscButton)
         self.oscLabel = QLabel('No OSC stars image selected', self)
         left_layout.addWidget(self.oscLabel)
@@ -29462,18 +29998,6 @@ class NBtoRGBstarsTab(QWidget):
         if image is None:
             return         
         if slot == self.image_manager.current_slot:
-            # Ensure the image is a numpy array
-            if not isinstance(image, np.ndarray):
-                image = np.array(image)  # Convert to numpy array if needed
-
-            # Update internal state with the new image and metadata
-            self.combined_image = image
-            self.original_header = metadata.get('original_header', None)
-            self.bit_depth = metadata.get('bit_depth', None)
-            self.is_mono = metadata.get('is_mono', False)
-
-            # Update image display (assuming updateImageDisplay handles the proper rendering)
-            self.updateImageDisplay()
 
             print(f"NBtoRGBstarsTab: Image updated from ImageManager slot {slot}.")
 
@@ -29486,12 +30010,54 @@ class NBtoRGBstarsTab(QWidget):
             QMessageBox.warning(self, "Warning", "No combined image available to push.")
             return
 
-        # Prepare metadata for the combined image.
+        # Check if any of the loaded file paths have an XISF extension
+        loaded_files = [self.ha_filename, self.oiii_filename, self.sii_filename, self.osc_filename]
+        was_xisf = any(file_path and file_path.lower().endswith('.xisf') for file_path in loaded_files)
+
+        # Generate a minimal FITS header if the original header is missing or if the format was XISF
+        sanitized_header = self.original_header
+        if was_xisf or sanitized_header is None:
+            sanitized_header = None  # Use None to avoid saving an empty header
+
+        # Determine the valid file path:
+        # Prioritize Ha, then OSC (if available)
+        file_path = None
+        if self.ha_image is not None and self.ha_filename:
+            file_path = self.ha_filename
+            print("Using Ha filename as file_path.")
+        elif self.osc_image is not None and self.osc_filename:
+            file_path = self.osc_filename
+            print("Using OSC filename as file_path.")
+        else:
+            # No valid source file, save combined_image to a temporary file
+            try:
+                temp_dir = tempfile.gettempdir()
+                timestamp = int(time.time())
+                temp_file_path = os.path.join(temp_dir, f"combined_image_{timestamp}.tif")
+
+                # Save the combined image using `save_image()`
+                save_image(
+                    img_array=self.combined_image,
+                    filename=temp_file_path,
+                    original_format='tif',
+                    bit_depth=self.bit_depth,
+                    original_header=self.original_header,
+                    is_mono=self.is_mono
+                )
+
+                file_path = temp_file_path
+                print(f"Combined image saved to temporary file: {file_path}")
+            except Exception as e:
+                print(f"Failed to save combined image to temporary file: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to save combined image to temporary file:\n{e}")
+                return
+
+        # Create metadata for the combined image
         metadata = {
-            'file_path': self.ha_filename if self.ha_image is not None else "Combined Image",
-            'original_header': self.original_header if self.original_header else {},
-            'bit_depth': self.bit_depth if self.bit_depth else "Unknown",
-            'is_mono': self.is_mono,
+            'file_path': file_path,
+            'original_header': sanitized_header,  # Use the sanitized or minimal header
+            'bit_depth': self.bit_depth if hasattr(self, 'bit_depth') else "Unknown",
+            'is_mono': False,  # Assume the combined image is color
             'processing_parameters': {
                 'ha_to_oii_ratio': self.haToOiiRatioSlider.value() / 100.0,
                 'enable_star_stretch': self.starStretchCheckBox.isChecked(),
@@ -29506,17 +30072,20 @@ class NBtoRGBstarsTab(QWidget):
             }
         }
 
-        # Update the active slot in the ImageManager.
+        # Push the image and metadata into the ImageManager
         if self.image_manager:
             try:
-                self.image_manager.set_image(self.combined_image, metadata=metadata)
+                self.image_manager.update_image(
+                    updated_image=self.combined_image, metadata=metadata
+                )
+                print(f"Image pushed to ImageManager with metadata: {metadata}")
                 QMessageBox.information(self, "Success", "Combined image pushed to active slot.")
-                print("NBtoRGBstarsTab: Combined image pushed to ImageManager active slot.")
             except Exception as e:
                 print(f"Error updating ImageManager: {e}")
                 QMessageBox.critical(self, "Error", f"Failed to update ImageManager:\n{e}")
         else:
-            QMessageBox.warning(self, "Warning", "ImageManager is not initialized. Cannot push the combined image.")
+            print("ImageManager is not initialized.")
+            QMessageBox.warning(self, "Warning", "ImageManager is not initialized. Cannot store the combined image.")
 
 
     def createRatioSlider(self, label_text, default_value):
@@ -29542,48 +30111,175 @@ class NBtoRGBstarsTab(QWidget):
         self.stretchSliderLabel.setVisible(enabled)
         self.stretchSlider.setVisible(enabled)
 
-    def selectImage(self, image_type):
-        selected_file, _ = QFileDialog.getOpenFileName(
-            self, f"Select {image_type} Image", "", "Images (*.png *.tif *.tiff *.fits *.fit *.xisf)"
+    def load_image(self, image_type):
+        """
+        Opens a dialog to load an image either from a file or from a slot based on user choice.
+
+        Parameters:
+            image_type (str): The type of image to load ('Ha', 'OIII', 'SII', 'OSC').
+        """
+        try:
+            print(f"Initiating load process for {image_type} image.")
+
+            # Step 1: Prompt user to choose the source
+            source_choice, ok = QInputDialog.getItem(
+                self,
+                f"Select {image_type} Image Source",
+                "Choose the source of the image:",
+                ["From File", "From Slot"],
+                editable=False
+            )
+
+            if not ok or not source_choice:
+                QMessageBox.warning(self, "Cancelled", f"{image_type} image loading cancelled.")
+                print(f"{image_type} image loading cancelled by the user.")
+                return
+
+            print(f"{image_type} image source selected: {source_choice}")
+
+            if source_choice == "From File":
+                result = self.load_image_from_file(image_type)
+            elif source_choice == "From Slot":
+                result = self.load_image_from_slot(image_type)
+            else:
+                QMessageBox.warning(self, "Invalid Choice", "Invalid source choice. Operation cancelled.")
+                print("Invalid source choice. Exiting load process.")
+                return
+
+            if result is None:
+                # Loading was unsuccessful or cancelled
+                return
+
+            image, original_header, bit_depth, is_mono, file_path = result
+
+            # Assign the loaded image to the appropriate attribute and update the label
+            if image_type == 'Ha':
+                self.ha_image = image
+                self.ha_filename = file_path
+                self.original_header = original_header
+                self.bit_depth = bit_depth
+                self.is_mono = is_mono
+                self.haLabel.setText(f"Loaded: {os.path.basename(file_path) if file_path else 'From Slot'}")
+            elif image_type == 'OIII':
+                self.oiii_image = image
+                self.oiii_filename = file_path
+                self.original_header = original_header
+                self.bit_depth = bit_depth
+                self.is_mono = is_mono
+                self.oiiiLabel.setText(f"Loaded: {os.path.basename(file_path) if file_path else 'From Slot'}")
+            elif image_type == 'SII':
+                self.sii_image = image
+                self.sii_filename = file_path
+                self.original_header = original_header
+                self.bit_depth = bit_depth
+                self.is_mono = is_mono
+                self.siiLabel.setText(f"Loaded: {os.path.basename(file_path) if file_path else 'From Slot'}")
+            elif image_type == 'OSC':
+                self.osc_image = image
+                self.osc_filename = file_path
+                self.original_header = original_header
+                self.bit_depth = bit_depth
+                self.is_mono = is_mono
+                self.oscLabel.setText(f"Loaded: {os.path.basename(file_path) if file_path else 'From Slot'}")
+            else:
+                QMessageBox.warning(self, "Unknown Image Type", f"Image type '{image_type}' is not recognized.")
+                print(f"Unknown image type: {image_type}")
+                return
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred while loading {image_type} image:\n{e}")
+            print(f"An unexpected error occurred while loading {image_type} image: {e}")
+
+    def load_image_from_file(self, image_type):
+        """
+        Handles loading an image from a file.
+
+        Parameters:
+            image_type (str): The type of image to load.
+
+        Returns:
+            tuple: (image, original_header, bit_depth, is_mono, file_path) or None on failure.
+        """
+        file_filter = "Images (*.png *.tif *.tiff *.fits *.fit *.xisf)"
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select {image_type} Image File",
+            "",
+            file_filter
         )
-        if selected_file:
-            try:
-                image, original_header, bit_depth, is_mono = load_image(selected_file)
-                if image is None:
-                    raise ValueError("Failed to load image data.")
 
-                if image_type == 'Ha':
-                    self.ha_image = image
-                    self.ha_filename = selected_file
-                    self.original_header = original_header
-                    self.bit_depth = bit_depth
-                    self.is_mono = is_mono
-                    self.haLabel.setText(f"{os.path.basename(selected_file)} selected")
-                elif image_type == 'OIII':
-                    self.oiii_image = image
-                    self.oiii_filename = selected_file
-                    self.original_header = original_header
-                    self.bit_depth = bit_depth
-                    self.is_mono = is_mono
-                    self.oiiiLabel.setText(f"{os.path.basename(selected_file)} selected")
-                elif image_type == 'SII':
-                    self.sii_image = image
-                    self.sii_filename = selected_file
-                    self.original_header = original_header
-                    self.bit_depth = bit_depth
-                    self.is_mono = is_mono
-                    self.siiLabel.setText(f"{os.path.basename(selected_file)} selected")
-                elif image_type == 'OSC':
-                    self.osc_image = image
-                    self.osc_filename = selected_file
-                    self.original_header = original_header
-                    self.bit_depth = bit_depth
-                    self.is_mono = is_mono
-                    self.oscLabel.setText(f"{os.path.basename(selected_file)} selected")
+        if not file_path:
+            QMessageBox.warning(self, "No File Selected", f"No {image_type} image file selected. Operation cancelled.")
+            print(f"No {image_type} image file selected.")
+            return None
 
-            except Exception as e:
-                print(f"Failed to load {image_type} image: {e}")
-                QMessageBox.critical(self, "Error", f"Failed to load {image_type} image:\n{e}")
+        print(f"{image_type} image file selected: {file_path}")
+
+        # Load the image using your existing load_image function
+        image, original_header, bit_depth, is_mono = load_image(file_path)
+        if image is None:
+            QMessageBox.critical(self, "Error", f"Failed to load {image_type} image from file.")
+            print(f"Failed to load {image_type} image from file: {file_path}")
+            return None
+
+        return image, original_header, bit_depth, is_mono, file_path
+
+    def load_image_from_slot(self, image_type):
+        if not self.image_manager:
+            QMessageBox.critical(self, "Error", "ImageManager is not initialized. Cannot load image from slot.")
+            print("ImageManager is not initialized. Cannot load image from slot.")
+            return None
+
+        # Build the list using the parent's slot_names dictionary.
+        available_slots = []
+        slot_names = self.parent_window.slot_names if self.parent_window else {}
+        for i in range(self.image_manager.max_slots):
+            slot_name = slot_names.get(i, f"Slot {i+1}")
+            available_slots.append(slot_name)
+
+        slot_choice, ok = QInputDialog.getItem(
+            self,
+            f"Select Slot for {image_type} Image",
+            "Choose a slot:",
+            available_slots,
+            editable=False
+        )
+
+        if not ok or not slot_choice:
+            QMessageBox.warning(self, "Cancelled", f"{image_type} image loading cancelled.")
+            print(f"{image_type} image loading cancelled by the user.")
+            return None
+
+        # Find the slot index that matches the chosen display name.
+        target_slot_num = None
+        for i in range(self.image_manager.max_slots):
+            current_name = slot_names.get(i, f"Slot {i+1}")
+            if current_name == slot_choice:
+                target_slot_num = i
+                break
+
+        if target_slot_num is None:
+            QMessageBox.critical(self, "Error", f"Invalid slot selection: {slot_choice}")
+            print(f"Error: Could not map slot name '{slot_choice}' to a slot number.")
+            return None
+
+        image = self.image_manager._images.get(target_slot_num, None)
+        if image is None:
+            QMessageBox.warning(self, "Empty Slot", f"{slot_choice} does not contain an image.")
+            print(f"{slot_choice} is empty. Cannot load {image_type} image.")
+            return None
+
+        print(f"{image_type} image selected from {slot_choice}.")
+
+        # Retrieve metadata.
+        metadata = self.image_manager._metadata.get(target_slot_num, {})
+        original_header = metadata.get('header', None)
+        bit_depth = metadata.get('bit_depth', "Unknown")
+        is_mono = metadata.get('is_mono', False)
+        file_path = metadata.get('file_path', None)
+
+        return image, original_header, bit_depth, is_mono, file_path
+
 
     def previewCombine(self):
         # Check if required images are loaded prior to starting the processing thread
@@ -29638,38 +30334,7 @@ class NBtoRGBstarsTab(QWidget):
         # Hide the spinner after processing is done
         self.hideSpinner()
 
-        # Prepare metadata with safeguards
-        metadata = {
-            'file_path': self.ha_filename if self.ha_image is not None else "Combined Image",
-            'original_header': self.original_header if self.original_header else {},
-            'bit_depth': self.bit_depth if self.bit_depth else "Unknown",
-            'is_mono': self.is_mono,
-            'processing_parameters': {
-                'ha_to_oii_ratio': self.haToOiiRatioSlider.value() / 100.0,
-                'enable_star_stretch': self.starStretchCheckBox.isChecked(),
-                'stretch_factor': self.stretchSlider.value() / 100.0
-            },
-            'processing_timestamp': datetime.now().isoformat(),
-            'source_images': {
-                'Ha': self.ha_filename if self.ha_image is not None else "Not Provided",
-                'OIII': self.oiii_filename if self.oiii_image is not None else "Not Provided",
-                'SII': self.sii_filename if self.sii_image is not None else "Not Provided",
-                'OSC': self.osc_filename if self.osc_image is not None else "Not Provided"
-            }
-        }
 
-        # Update ImageManager with the new combined image
-        if self.image_manager:
-            try:
-                self.image_manager.update_image(updated_image=self.combined_image, metadata=metadata)
-                print("NBtoRGBstarsTab: Combined image stored in ImageManager.")
-                
-            except Exception as e:
-                print(f"Error updating ImageManager: {e}")
-                QMessageBox.critical(self, "Error", f"Failed to update ImageManager:\n{e}")
-        else:
-            print("ImageManager is not initialized.")
-            QMessageBox.warning(self, "Warning", "ImageManager is not initialized. Cannot store the combined image.")
 
     def showSpinner(self):
         self.spinnerLabel.show()
@@ -31930,6 +32595,10 @@ def save_image(img_array, filename, original_format, bit_depth=None, original_he
                     if key.startswith("XISF:"):
                         continue  # Skip XISF metadata
 
+                    if key in ["RANGE_LOW", "RANGE_HIGH"]:
+                        print(f"Removing {key} from header to prevent overflow.")
+                        continue  # Skip adding RANGE_LOW and RANGE_HIGH
+
                     if isinstance(value, dict) and 'value' in value:
                         value = value['value']
 
@@ -32103,7 +32772,7 @@ def save_image(img_array, filename, original_format, bit_depth=None, original_he
 
 
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def _numba_mono_final_formula(rescaled, median_rescaled, target_median):
     """
     Applies the final formula *after* we already have the rescaled values.
@@ -32122,13 +32791,13 @@ def _numba_mono_final_formula(rescaled, median_rescaled, target_median):
             r = rescaled[y, x]
             numer = (median_rescaled - 1.0) * target_median * r
             denom = median_rescaled * (target_median + r - 1.0) - target_median * r
-            if abs(denom) < 1e-12:
+            if np.abs(denom) < 1e-12:
                 denom = 1e-12
             out[y, x] = numer / denom
 
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def _numba_color_final_formula_linked(rescaled, median_rescaled, target_median):
     """
     Linked color transform: we use one median_rescaled for all channels.
@@ -32144,13 +32813,13 @@ def _numba_color_final_formula_linked(rescaled, median_rescaled, target_median):
                 r = rescaled[y, x, c]
                 numer = (median_rescaled - 1.0) * target_median * r
                 denom = median_rescaled * (target_median + r - 1.0) - target_median * r
-                if abs(denom) < 1e-12:
+                if np.abs(denom) < 1e-12:
                     denom = 1e-12
                 out[y, x, c] = numer / denom
 
     return out
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def _numba_color_final_formula_unlinked(rescaled, medians_rescaled, target_median):
     """
     Unlinked color transform: a separate median_rescaled per channel.
@@ -32167,7 +32836,7 @@ def _numba_color_final_formula_unlinked(rescaled, medians_rescaled, target_media
                 med = medians_rescaled[c]
                 numer = (med - 1.0) * target_median * r
                 denom = med * (target_median + r - 1.0) - target_median * r
-                if abs(denom) < 1e-12:
+                if np.abs(denom) < 1e-12:
                     denom = 1e-12
                 out[y, x, c] = numer / denom
 
@@ -32335,7 +33004,7 @@ def piecewise_linear(val, xvals, yvals):
             return yvals[i] + ratio * dy
     return yvals[-1]
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def apply_curves_numba(image, xvals, yvals):
     """
     Numba-accelerated routine to apply piecewise linear interpolation 
@@ -36574,78 +37243,64 @@ class CalculationThread(QThread):
             # Define observer's location
             location = EarthLocation(lat=self.latitude * u.deg, lon=self.longitude * u.deg, height=0 * u.m)
 
-            # Calculate Local Sidereal Time
+            # Calculate Local Sidereal Time (LST)
             lst = astropy_time.sidereal_time('apparent', self.longitude * u.deg)
             self.lst_calculated.emit(f"Local Sidereal Time: {lst.to_string(unit=u.hour, precision=3)}")
 
             # Calculate lunar phase
             phase_percentage, phase_image_name = self.calculate_lunar_phase(astropy_time, location)
-
-            # Emit lunar phase data
             self.lunar_phase_calculated.emit(phase_percentage, phase_image_name)
 
-            # Determine the path to celestial_catalog.csv
-            catalog_file = os.path.join(
-                getattr(sys, '_MEIPASS', os.path.dirname(__file__)), "celestial_catalog.csv"
-            )
-
-            # Load celestial catalog from CSV
+            # Load celestial catalog
+            catalog_file = self.get_catalog_file_path()
             if not os.path.exists(catalog_file):
                 self.calculation_complete.emit(pd.DataFrame(), "Catalog file not found.")
                 return
 
             df = pd.read_csv(catalog_file, encoding='ISO-8859-1')
 
-            # Apply catalog filters
+            # Apply catalog filters **AFTER reading to avoid index mismatch**
             df = df[df['Catalog'].isin(self.catalog_filters)]
             df.dropna(subset=['RA', 'Dec'], inplace=True)
 
-            # Check altitude and calculate additional metrics
+            # Ensure DataFrame is contiguous
+            df.reset_index(drop=True, inplace=True)
+
+            # Convert RA/Dec into SkyCoord objects **vectorized**
+            sky_coords = SkyCoord(ra=df['RA'].values * u.deg, dec=df['Dec'].values * u.deg, frame='icrs')
+
+            # Create an AltAz frame for observer location
             altaz_frame = AltAz(obstime=astropy_time, location=location)
-            altitudes, azimuths, minutes_to_transit, degrees_from_moon = [], [], [], []
-            before_or_after = []
 
+            # **Vectorized altitude and azimuth calculation**
+            altaz = sky_coords.transform_to(altaz_frame)
+            df['Altitude'] = np.round(altaz.alt.deg, 1)
+            df['Azimuth'] = np.round(altaz.az.deg, 1)
+
+            # **Vectorized Moon Separation Calculation**
             moon = get_body("moon", astropy_time, location).transform_to(altaz_frame)
+            df['Degrees from Moon'] = np.round(sky_coords.separation(moon).deg, 2)
 
-            for _, row in df.iterrows():
-                sky_coord = SkyCoord(ra=row['RA'] * u.deg, dec=row['Dec'] * u.deg, frame='icrs')
-                altaz = sky_coord.transform_to(altaz_frame)
-                altitudes.append(round(altaz.alt.deg, 1))
-                azimuths.append(round(altaz.az.deg, 1))
-
-                # Calculate time difference to transit
-                ra = row['RA'] * u.deg.to(u.hourangle)  # Convert RA from degrees to hour angle
-                time_diff = ((ra - lst.hour) * u.hour) % (24 * u.hour)
-                minutes = round(time_diff.value * 60, 1)
-                if minutes > 720:
-                    minutes = 1440 - minutes
-                    before_or_after.append("After")
-                else:
-                    before_or_after.append("Before")
-                minutes_to_transit.append(minutes)
-
-                # Calculate angular distance from the moon
-                moon_sep = sky_coord.separation(moon).deg
-                degrees_from_moon.append(round(moon_sep, 2))
-
-            df['Altitude'] = altitudes
-            df['Azimuth'] = azimuths
-            df['Minutes to Transit'] = minutes_to_transit
-            df['Before/After Transit'] = before_or_after
-            df['Degrees from Moon'] = degrees_from_moon
-
-            # Apply altitude filter
+            # **Apply altitude filter after calculations**
             df = df[df['Altitude'] >= self.min_altitude]
 
-            # Sort by "Minutes to Transit"
-            df = df.sort_values(by='Minutes to Transit')
+            # **Vectorized calculation of "Minutes to Transit"**
+            ra_hours = df['RA'].values * (24 / 360.0)  # Convert degrees to hours
+            time_diff = ((ra_hours - lst.hour) * u.hour) % (24 * u.hour)  # Hour difference
+            df['Minutes to Transit'] = np.round(time_diff.value * 60, 1)
 
-            # Limit the results to the object_limit
-            df = df.head(self.object_limit)
+            # Correct Before/After Transit flags efficiently
+            df['Before/After Transit'] = np.where(df['Minutes to Transit'] > 720, "After", "Before")
+            df['Minutes to Transit'] = np.where(df['Minutes to Transit'] > 720, 1440 - df['Minutes to Transit'], df['Minutes to Transit'])
+
+            # **Optimized Sorting & Selection**
+            df = df.nsmallest(self.object_limit, 'Minutes to Transit')  # Faster than full sort
 
             self.calculation_complete.emit(df, "Calculation complete.")
         except Exception as e:
             self.calculation_complete.emit(pd.DataFrame(), f"Error: {str(e)}")
+
+
 
 
     def calculate_lunar_phase(self, astropy_time, location):
