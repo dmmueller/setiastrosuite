@@ -1,9 +1,9 @@
 {
-  "version": "2.12.2",
+  "version": "2.12.5",
   "downloads": {
-    "Windows": "https://github.com/setiastro/setiastrosuite/releases/download/V2.12.2/setiastrosuite_windows.exe",
-    "macOS": "https://github.com/setiastro/setiastrosuite/releases/download/V2.12.2/setiastrosuite_mac.tar.gz",
-    "Linux": "https://github.com/setiastro/setiastrosuite/releases/download/V2.12.2/setiastrosuite_linux.tar.xz"
+    "Windows": "https://github.com/setiastro/setiastrosuite/releases/download/V2.12.5/setiastrosuite_windows.exe",
+    "macOS": "https://github.com/setiastro/setiastrosuite/releases/download/V2.12.5/setiastrosuite_mac.tar.gz",
+    "Linux": "https://github.com/setiastro/setiastrosuite/releases/download/V2.12.5/setiastrosuite_linux.tar.xz"
   },
-  "notes": "Major Bug Fix: Flats were overcorrecting due to normalization of master flat prior to saving it.  This has been corrected."
+  "notes": "Seestar Mode in Mosaic Master. Automatic Fits handling in Stacking Suite (no need to manually debayer), greatly improved alignment through AstroAlign removing the alignment errors and greatly speeding up the process!"
 }
