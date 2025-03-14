@@ -5,10 +5,10 @@
 PY = python3.12 # python version for venv
 
 run: venv # setup python virtual environment and run program
-	$(VENV)/python setiastrosuitemacQT6.py
+	$(VENV)/python setiastrosuiteQT6.py
 
 build: venv # build executable with pyinstaller
-	$(VENV)/pyinstaller setiastrosuitemac.spec
+	$(VENV)/pyinstaller setiastrosuitemac-test.spec
 
 clean: # clean directory
 	rm -rf ./dist ./build ./__pycache__ ./.venv

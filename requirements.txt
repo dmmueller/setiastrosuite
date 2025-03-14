@@ -19,3 +19,4 @@ photutils
 reproject
 numba
 exifread
+astroalign
