@@ -36,16 +36,18 @@ photutils_path = get_package_paths('photutils')[0]
 directory = './.venv/lib/python3.*/site-packages'
 
 a = Analysis(
-    ['setiastrosuitemacQT6.py'],
+    ['setiastrosuiteQT6.py'],
     pathex=[],
     binaries=[],
     datas=[
         (directory + '/astroquery/CITATION', 'astroquery'),
         (directory + '/photutils/CITATION.rst', 'photutils'),
-        ('celestial_catalog.csv', '.'), 
+        ('celestial_catalog.csv', '.'),
+        ('numba_utils.py', '.'),
         ('*.png', '.'),
         ('spinner.gif', '.'),
         ('imgs', 'imgs'),
+        #('xisf.py', '.'),
         (directory + '/astroquery/simbad/data', 'astroquery/simbad/data'), 
         (directory + '/astropy/CITATION', 'astropy')
     ] + dask_data+ photutils_data,
@@ -79,6 +81,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=[directory + 'astrosuite.icns'],
+    icon='astrosuite.icns',
     onefile=True  # Enable single-file mode
 )
