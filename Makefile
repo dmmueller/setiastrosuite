@@ -8,7 +8,7 @@ run: venv # setup python virtual environment and run program
 	$(VENV)/python setiastrosuiteQT6.py
 
 build: venv # build executable with pyinstaller
-	$(VENV)/pyinstaller setiastrosuitemac-test.spec
+	$(VENV)/pyinstaller setiastrosuitemac-edit.spec
 
 clean: # clean directory
 	rm -rf ./dist ./build ./__pycache__ ./.venv

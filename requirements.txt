@@ -20,3 +20,4 @@ reproject
 numba
 exifread
 astroalign
+matplotlib
