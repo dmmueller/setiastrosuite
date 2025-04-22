@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 from PyInstaller.utils.hooks import (
     collect_submodules,
     collect_data_files,
-    collect_dynamic_libs
+    collect_dynamic_libs,
+    get_package_paths
 )
 
 import sys
@@ -14,9 +14,6 @@ if "numba.core.types.old_scalars" not in sys.modules:
     dummy = types.ModuleType("numba.core.types.old_scalars")
     sys.modules["numba.core.types.old_scalars"] = dummy
 
-from PyInstaller.utils.hooks import collect_data_files
-from PyInstaller.utils.hooks import get_package_paths
-
 # 1) Collect photutils data (including CITATION.rst).
 photutils_data = collect_data_files('photutils')
 
@@ -25,7 +22,6 @@ photutils_submodules = collect_submodules('photutils')
 
 # 3) Collect any compiled libraries from photutils (the .pyd / .dll / .so).
 photutils_binaries = collect_dynamic_libs('photutils')
-
 
 # 1. Collect Dask data (templates, etc.)
 dask_data = collect_data_files('dask', include_py_files=False)
@@ -47,8 +43,7 @@ a = Analysis(
         ('*.png', '.'),
         ('spinner.gif', '.'),
         ('imgs', 'imgs'),
-        #('xisf.py', '.'),
-        (directory + '/astroquery/simbad/data', 'astroquery/simbad/data'), 
+        (directory + '/astroquery/simbad/data', 'astroquery/simbad/data'),
         (directory + '/astropy/CITATION', 'astropy')
     ] + dask_data+ photutils_data,
     hiddenimports=[] + photutils_submodules,
