@@ -14,8 +14,7 @@ Pillow
 plotly
 psutil
 pyinstaller
-pyqt6
-pyqt6
+PyQt6
 pyqtgraph
 pytest
 pytz
@@ -23,7 +22,9 @@ pywavelets
 rawpy
 reproject
 requests
+sep
 scipy
 tifffile
+xisf
 zfpy
 zstandard
